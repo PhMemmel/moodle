@@ -429,7 +429,7 @@ class course_edit_form extends moodleform {
         }
         $buttonarray[] = &$mform->createElement('submit', 'saveanddisplay', get_string('savechangesanddisplay'), $classarray);
         $buttonarray[] = &$mform->createElement('cancel');
-        $mform->addGroup($buttonarray, 'buttonar', '', array(' '), false);
+        $mform->addGroup($buttonarray, 'buttonar', '', array(' '), false, ['class' => 'col-md-12']);
         $mform->closeHeaderBefore('buttonar');
         $mform->set_sticky_footer('buttonar');
 

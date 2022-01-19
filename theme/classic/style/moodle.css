@@ -36087,8 +36087,8 @@ body {
   box-shadow: 0 0 1rem rgba(0, 0, 0, 0.15);
   font-size: calc(0.9375rem * 1.10);
 }
-.stickyfooter .form-group {
-  flex-grow: 0.2;
+.stickyfooter fieldset div {
+  justify-content: flex-end;
 }
 
 .hasstickyfooter .stickyfooter {
