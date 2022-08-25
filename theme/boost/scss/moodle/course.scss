@@ -258,9 +258,11 @@ body:not(.editing)  .sitetopic ul.section {
 .section .activity.modtype_label.label {
     font-weight: normal;
 
-    // Remove min-height for labels so top and bottom paddings can be displayed more consistently.
     .contentwithoutlink {
+        // Remove min-height for labels so top and bottom paddings can be displayed more consistently.
         min-height: 0;
+        // Avoid overflow of a label for example including images with a width greater than course content width.
+        overflow-x: auto;
     }
 
     // When activity information is shown remove the bottom margin for the last p/i elements.
