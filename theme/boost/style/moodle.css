@@ -13986,7 +13986,8 @@ body:not(.editing) .sitetopic ul.section {
 .section .activity.modtype_label.label {
   font-weight: normal; }
   .section .activity.modtype_label.label .contentwithoutlink {
-    min-height: 0; }
+    min-height: 0;
+    overflow-x: auto; }
   .section .activity.modtype_label.label.hasinfo p:last-child,
   .section .activity.modtype_label.label.hasinfo i:last-child {
     margin-bottom: 0; }
