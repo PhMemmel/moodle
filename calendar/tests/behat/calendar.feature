@@ -314,3 +314,101 @@ Feature: Perform basic calendar functionality
     And I press "Save"
     And I click on "Category event" "link"
     And I should see "Category event"
+
+  @javascript
+  Scenario: Changing the event type from user to anything else should work
+    Given I log in as "teacher1"
+    # We need this so we can see the groups.
+    And the following "course enrolments" exist:
+      | user     | course | role           |
+      | teacher1 | C1     | editingteacher |
+    # We need this so we can make a category event.
+    And the following "categories" exist:
+      | name | category | idnumber |
+      | CatA | 0        | cata     |
+    And the following "role assigns" exist:
+      | user     | role    | contextlevel  | reference |
+      | teacher1 | manager | Category      | cata      |
+    And I am on "Course 1" course homepage
+     # We need to change the category into our category.
+    When I navigate to "Edit settings" in current page administration
+    And I expand the "Course category" autocomplete
+    And I click on "CatA" item in the autocomplete list
+    And I press "Save and display"
+    And I follow "This month"
+    And I press "New event"
+    And I set the following fields to these values:
+      | Event title   | type change test event |
+      | Type of event | User                   |
+    And I press "Save"
+    And I am on "Course 1" course homepage
+    And I follow "This month"
+    And I click on "type change test event" "link"
+    And I should see "User event"
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title   | type change test event |
+      | Type of event | Course                 |
+    And I expand the "Course" autocomplete
+    And I click on "Course 1" item in the autocomplete list
+    And I press "Save"
+    And I click on "type change test event" "link"
+    Then I should see "Course event"
+    # Reset to user event
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title   | type change test event |
+      | Type of event | User                   |
+    And I press "Save"
+    And I click on "type change test event" "link"
+    And I should see "User event"
+    # Now test changing from user to group event.
+    And I am on "Course 1" course homepage
+    #And I follow "Full calendar"
+    And I follow "This month"
+    And I click on "type change test event" "link"
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title   | type change test event |
+      | Type of event | Group                  |
+    And I click on "#fitem_id_groupcourseid .form-autocomplete-downarrow" "css_element"
+    And I click on "Course 1" item in the autocomplete list
+    And I set the following fields to these values:
+      | Group | Group 1 |
+    And I press "Save"
+    And I click on "type change test event" "link"
+    And I should see "Group event"
+    # Reset to user event
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title | type change test event |
+      | Type of event | User |
+    And I press "Save"
+    And I click on "type change test event" "link"
+    And I should see "User event"
+    # Now test changing from user to course event.
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title   | Course 1 event |
+      | Type of event | Course         |
+    And I expand the "Course" autocomplete
+    And I click on "Course 1" item in the autocomplete list
+    And I press "Save"
+    And I click on "Course 1 event" "link"
+    And I should see "Course event"
+    # Reset to user event
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title   | type change test event |
+      | Type of event | User                   |
+    And I press "Save"
+    And I click on "type change test event" "link"
+    And I should see "User event"
+    # Now test changing from user to category event.
+    And I click on "Edit" "button"
+    And I set the following fields to these values:
+      | Event title   | type change test event |
+      | Type of event | Category               |
+    And I press "Save"
+    And I click on "type change test event" "link"
+    And I should see "Category event"
