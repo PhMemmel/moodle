@@ -646,6 +646,28 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
     }
 
     /**
+     * Per default, a field does not support the export of files.
+     *
+     * A field type can overwrite this function and return true. In this case it also has to implement the function
+     * export_file_value().
+     *
+     * @return false means file exports are not supported
+     */
+    function file_export_supported() {
+        return false;
+    }
+
+    /**
+     * Returns a stored_file object for exporting a file of a given record.
+     *
+     * @param int $recordid the id of the mod_data record the file belongs to
+     * @return null if there is no file to export
+     */
+    function export_file_value(int $recordid) {
+        return null;
+    }
+
+    /**
      * @param string $relativepath
      * @return bool false
      */
@@ -3168,9 +3190,10 @@ function data_export_xls($export, $dataname, $count) {
  * @param array $export
  * @param string $dataname
  * @param int $count
- * @param string
+ * @param bool $return if the file content should be returned or the file should be sent directly to the user
+ * @return string the file content if $return is true, nothing otherwise, the file is being sent to the user directly
  */
-function data_export_ods($export, $dataname, $count) {
+function data_export_ods($export, $dataname, $count, $return) {
     global $CFG;
     require_once("$CFG->libdir/odslib.class.php");
     $filename = clean_filename("{$dataname}-{$count}_record");
@@ -3193,8 +3216,15 @@ function data_export_ods($export, $dataname, $count) {
         }
         $rowno++;
     }
-    $workbook->close();
-    return $filename;
+    if ($return) {
+        require_once($CFG->libdir . '/filelib.php');
+        $writer = new MoodleODSWriter($worksheet);
+        $contents = $writer->get_file_content();
+        return $contents;
+    } else {
+        $workbook->close();
+        return $filename;
+    }
 }
 
 /**
@@ -3265,6 +3295,7 @@ function data_get_exportdata($dataid, $fields, $selectedfields, $currentgroup=0,
             foreach($fields as $field) {
                 $contents = '';
                 if(isset($content[$field->field->id])) {
+                    $content[$field->field->id]->id = $record->id;
                     $contents = $field->export_text_value($content[$field->field->id]);
                 }
                 $exportdata[$line][] = $contents;

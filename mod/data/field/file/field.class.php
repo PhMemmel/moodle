@@ -219,7 +219,28 @@ class data_field_file extends data_field_base {
     }
 
     function text_export_supported() {
-        return false;
+        return true;
+    }
+
+    /**
+     * Here we export the filename which should match the filename of all exported files in the zip archive.
+     *
+     * The filename consists of the record id, an underscore followed by the fieldid, another underscore followed by the
+     *  filename.
+     *
+     * @param string $record
+     * @return string
+     */
+    function export_text_value($record) {
+        return $record->id . '_' . $record->fieldid . '_' . $record->content;
+    }
+
+    function file_export_supported() {
+        return true;
+    }
+
+    function export_file_value($recordid) {
+        return $this->get_file($recordid);
     }
 
     function file_ok($path) {

@@ -112,7 +112,13 @@ class mod_data_export_form extends moodleform {
             $exportoptions[] = $mform->createElement('checkbox', 'exportapproval', get_string('includeapproval', 'data'), '',
                 $optionattrs);
         }
+        $exportoptions[] = $mform->createElement('checkbox', 'exportfiles', get_string('exportfiles', 'data'), '', $optionattrs);
+        $mform->setDefault('exportfiles', 1);
+        $exportoptions[] = $mform->createElement('checkbox', 'keeporiginalfilenames',
+            get_string('keeporiginalfilenames', 'data'), '', $optionattrs);
         $mform->addGroup($exportoptions, 'exportoptions', get_string('selectexportoptions', 'data'), ['<br>'], false);
+
+        $mform->disabledIf('keeporiginalfilenames', 'exportfiles', 'notchecked', 1);
 
         $this->add_action_buttons(true, get_string('exportentries', 'data'));
     }

@@ -85,6 +85,7 @@ if ($mform->is_cancelled()) {
         new \moodle_url('/mod/data/view.php', ['d' => $data->id]);
     redirect($redirectbackto);
 } else if ($formdata = (array) $mform->get_data()) {
+
     $selectedfields = array();
     foreach ($formdata as $key => $value) {
         //field form elements are field_1 field_2 etc. 0 if not selected. 1 if selected.
@@ -98,17 +99,50 @@ if ($mform->is_cancelled()) {
     $exportdata = data_get_exportdata($data->id, $fields, $selectedfields, $currentgroup, $context,
         $exportuser, $exporttime, $exportapproval, $tags);
     $count = count($exportdata);
+
+    $fieldswithfileexport = array_filter($fields, fn($field) => $field->file_export_supported()
+            && in_array($field->field->id, $selectedfields));
+
+    $exportfiles = !empty($formdata['exportfiles']) && !empty($fieldswithfileexport);
+
     switch ($formdata['exporttype']) {
         case 'csv':
-            data_export_csv($exportdata, $formdata['delimiter_name'], $data->name, $count);
+            $exportfilecontent = data_export_csv($exportdata, $formdata['delimiter_name'], $data->name, $count, $exportfiles);
             break;
         case 'xls':
+            // Currently xls export does not support files.
             data_export_xls($exportdata, $data->name, $count);
             break;
         case 'ods':
-            data_export_ods($exportdata, $data->name, $count);
+            $exportfilecontent = data_export_ods($exportdata, $data->name, $count, $exportfiles);
             break;
     }
+
+    // We will generate a zip archive to download, so we inform the moodleform that the download already has been
+    // done for it to continue to work after the zip download.
+    \core_form\util::form_download_complete();
+    $filename = $data->name . '-' . $count . '-record';
+    if ($count > 1) {
+        $filename .= 's';
+    }
+    $zipwriter = \core_files\archive_writer::get_stream_writer($filename . '.zip',
+        \core_files\archive_writer::ZIP_WRITER);
+
+    foreach ($fieldswithfileexport as $field) {
+        $records = $DB->get_records('data_content', ['fieldid' => $field->field->id], '', 'recordid');
+        foreach ($records as $record) {
+            $file = $field->export_file_value($record->recordid);
+            $pathinzip = '/files/';
+            if (empty($formdata['keeporiginalfilenames'])) {
+                $pathinzip .= $record->recordid . '_' . $field->field->id . '_';
+            }
+            $pathinzip .= $file->get_filename();
+            $zipwriter->add_file_from_stored_file($pathinzip, $file);
+        }
+    }
+    $zipwriter->add_file_from_string($filename . '.' . $formdata['exporttype'], $exportfilecontent);
+    $zipwriter->finish();
+    exit(0);
 }
 
 // Build header to match the rest of the UI.
