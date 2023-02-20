@@ -86,13 +86,45 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading_with_help(get_string('uploadrecords', 'mod_data'), 'uploadrecords', 'mod_data');
 
 if ($formdata = $form->get_data()) {
-    $filecontent = $form->get_file_content('recordsfile');
-    $recordsadded = data_import_csv($cm, $data, $filecontent, $formdata->encoding, $formdata->fielddelimiter);
+    print_r($formdata);
+    print_r($form->get_new_filename('recordsfile'));
+    $uploadedfile = $form->save_temp_file('recordsfile');
 
-    if ($recordsadded > 0) {
-        echo $OUTPUT->notification($recordsadded. ' '. get_string('recordssaved', 'data'), '');
+    if (pathinfo($form->get_new_filename('recordsfile'), PATHINFO_EXTENSION) == 'zip') {
+        $packer = get_file_packer();
+        core_php_time_limit::raise(180);
+        $tempdir = make_request_directory();
+        $packer->extract_to_pathname($uploadedfile, $tempdir);
+        $filestempdir = $tempdir . '/files/';
+        // Find all csv files in the root of the zip archive.
+        $csvfilenames = array_filter($packer->list_files($uploadedfile),
+            fn($file) => pathinfo($file->pathname, PATHINFO_EXTENSION ) === 'csv'
+                    && !str_contains($file->pathname, '/'));
+        unlink($uploadedfile);
+        if (empty($csvfilenames)) {
+            $error = get_string('errornocsvfilefound', 'data');
+        }
+        if (count($csvfilenames) > 1) {
+            $error = get_string('errortoomanycsvfilesfound', 'data');
+        }
+        if (empty($error)) {
+            $csvdata = file_get_contents($tempdir . '/' . reset($csvfilenames)->pathname);
+        }
+
     } else {
-        echo $OUTPUT->notification(get_string('recordsnotsaved', 'data'), 'notifysuccess');
+        $csvdata = $form->get_file_content('recordsfile');
+    }
+
+    if (!empty($error)) {
+        echo $OUTPUT->notification($error, \core\output\notification::NOTIFY_ERROR);
+    } else {
+        $recordsadded = data_import_csv($cm, $data, $csvdata, $formdata->encoding, $formdata->fielddelimiter, $filestempdir);
+
+        if ($recordsadded > 0) {
+            echo $OUTPUT->notification($recordsadded. ' '. get_string('recordssaved', 'data'), '');
+        } else {
+            echo $OUTPUT->notification(get_string('recordsnotsaved', 'data'), 'notifysuccess');
+        }
     }
 
     echo $OUTPUT->continue_button($redirectbackto);

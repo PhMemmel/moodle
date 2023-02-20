@@ -232,16 +232,42 @@ class data_field_file extends data_field_base {
      * @return string
      */
     function export_text_value($record) {
-        return $record->id . '_' . $record->fieldid . '_' . $record->content;
+        return !empty($record->content)
+            ? 'fieldfile_' . $record->id . '_' . $record->fieldid . '_' . $record->content
+            : null;
     }
 
     function file_export_supported() {
         return true;
     }
 
+    /**
+     * Exports the file for a file export.
+     *
+     * @param int $recordid the id of the record
+     * @return bool|stored_file|null the stored_file to export, null if no file available in this record
+     */
     function export_file_value($recordid) {
         return $this->get_file($recordid);
     }
+
+    function file_import_supported() {
+        return true;
+    }
+
+    function import_file_value($contentid, $filecontent, $filename) {
+        $filerecord = [
+            'contextid' => $this->context->id,
+            'component' => 'mod_data',
+            'filearea' => 'content',
+            'itemid' => $contentid,
+            'filepath' => '/',
+            'filename' => $filename,
+        ];
+        $fs = get_file_storage();
+        $fs->create_file_from_string($filerecord, $filecontent);
+    }
+
 
     function file_ok($path) {
         return true;

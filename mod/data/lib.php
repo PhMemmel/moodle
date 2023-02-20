@@ -668,6 +668,29 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
     }
 
     /**
+     * Per default, a field does not support the import of files.
+     *
+     * A field type can overwrite this function and return true. In this case it also has to implement the function
+     * import_file_value().
+     *
+     * @return false means file imports are not supported
+     */
+    function file_import_supported() {
+        return false;
+    }
+
+    /**
+     * Returns a stored_file object for exporting a file of a given record.
+     *
+     * @param int $contentid content id
+     * @param string $filecontent the content of the file as string
+     * @param string $filename the filename the file should have
+     */
+    function import_file_value(int $contentid, string $filecontent, string $filename) {
+        return;
+    }
+
+    /**
      * @param string $relativepath
      * @return bool false
      */
@@ -710,6 +733,14 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
             $configs["param$i"] = null;
         }
         return $configs;
+    }
+
+    public function get_export_file_prefix($recordid, $fieldid): string {
+        return 'fieldfile_' . $recordid . '_' . $fieldid . '_';
+    }
+
+    public function get_export_file_prefix_pattern(): string {
+        return '/^fieldfile_[0-9]+_[0-9]+_/';
     }
 }
 
@@ -3003,7 +3034,7 @@ function data_supports($feature) {
  * @param string $fielddelimiter The delimiter of the csv data.
  * @return int Number of records added.
  */
-function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter) {
+function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter, $filestempdir) {
     global $CFG, $DB;
     // Large files are likely to take their time and memory. Let PHP know
     // that we'll take longer, and that the process should be recycled soon
@@ -3093,11 +3124,28 @@ function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter) {
                     if (method_exists($field, 'update_content_import')) {
                         $field->update_content_import($recordid, $value, 'field_' . $field->field->id);
                     } else {
+                        // If the value is empty we cannot import anything.
+                        if (empty($value)) {
+                            continue;
+                        }
                         $content = new stdClass();
                         $content->fieldid = $field->field->id;
-                        $content->content = $value;
                         $content->recordid = $recordid;
-                        $DB->insert_record('data_content', $content);
+                        if ($field->file_import_supported()) {
+                            $content->content = preg_replace($field->get_export_file_prefix_pattern(),
+                                '', $value);
+                        } else {
+                            $content->content = $value;
+                        }
+                        $contentid = $DB->insert_record('data_content', $content);
+                        if($field->file_import_supported()) {
+                            $filepath = $filestempdir . '/' . $value;
+                            if (!is_file($filepath)) {
+                                debugging('File ' . $filepath . ' could not be found. Continuing to next field.');
+                                continue;
+                            }
+                            $field->import_file_value($contentid, file_get_contents($filepath), $content->content);
+                        }
                     }
                 }
 

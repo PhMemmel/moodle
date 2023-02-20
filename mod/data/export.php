@@ -98,7 +98,8 @@ if ($mform->is_cancelled()) {
 
     $exportdata = data_get_exportdata($data->id, $fields, $selectedfields, $currentgroup, $context,
         $exportuser, $exporttime, $exportapproval, $tags);
-    $count = count($exportdata);
+    // The $exportdata array also contains the header lines, so the real count of records is count($exportdata)- 1.
+    $count = count($exportdata) - 1;
 
     $fieldswithfileexport = array_filter($fields, fn($field) => $field->file_export_supported()
             && in_array($field->field->id, $selectedfields));
@@ -131,10 +132,13 @@ if ($mform->is_cancelled()) {
     foreach ($fieldswithfileexport as $field) {
         $records = $DB->get_records('data_content', ['fieldid' => $field->field->id], '', 'recordid');
         foreach ($records as $record) {
-            $file = $field->export_file_value($record->recordid);
+            if (!$file = $field->export_file_value($record->recordid)) {
+                // field of this record seems to empty, just skip.
+                continue;
+            }
             $pathinzip = '/files/';
             if (empty($formdata['keeporiginalfilenames'])) {
-                $pathinzip .= $record->recordid . '_' . $field->field->id . '_';
+                $pathinzip .= $field->get_export_file_prefix($record->recordid, $field->field->id);
             }
             $pathinzip .= $file->get_filename();
             $zipwriter->add_file_from_stored_file($pathinzip, $file);
