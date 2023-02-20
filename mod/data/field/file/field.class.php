@@ -223,17 +223,14 @@ class data_field_file extends data_field_base {
     }
 
     /**
-     * Here we export the filename which should match the filename of all exported files in the zip archive.
+     * Here we export the text value of a file field which is the filename of the exported file.
      *
-     * The filename consists of the record id, an underscore followed by the fieldid, another underscore followed by the
-     *  filename.
-     *
-     * @param string $record
-     * @return string
+     * @param stdClass $record the record which is being exported
+     * @return string the value which will be stored in the exported file for this field
      */
     function export_text_value($record) {
         return !empty($record->content)
-            ? 'fieldfile_' . $record->id . '_' . $record->fieldid . '_' . $record->content
+            ? $this->get_export_file_prefix($record->id, $record->fieldid) . $record->content
             : null;
     }
 
@@ -244,11 +241,11 @@ class data_field_file extends data_field_base {
     /**
      * Exports the file for a file export.
      *
-     * @param int $recordid the id of the record
+     * @param stdClass $record the data content record the file belongs to
      * @return bool|stored_file|null the stored_file to export, null if no file available in this record
      */
-    function export_file_value($recordid) {
-        return $this->get_file($recordid);
+    function export_file_value($record) {
+        return $this->get_file($record->recordid);
     }
 
     function file_import_supported() {

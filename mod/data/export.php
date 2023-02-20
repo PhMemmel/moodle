@@ -132,8 +132,8 @@ if ($mform->is_cancelled()) {
     foreach ($fieldswithfileexport as $field) {
         $records = $DB->get_records('data_content', ['fieldid' => $field->field->id], '', 'recordid');
         foreach ($records as $record) {
-            if (!$file = $field->export_file_value($record->recordid)) {
-                // field of this record seems to empty, just skip.
+            if (!$file = $field->export_file_value($record)) {
+                // field of this record seems to be empty, just skip.
                 continue;
             }
             $pathinzip = '/files/';

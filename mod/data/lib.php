@@ -660,10 +660,10 @@ class data_field_base {     // Base class for Database Field Types (see field/*/
     /**
      * Returns a stored_file object for exporting a file of a given record.
      *
-     * @param int $recordid the id of the mod_data record the file belongs to
+     * @param stdClass $record the mod_data data content record the file belongs to
      * @return null if there is no file to export
      */
-    function export_file_value(int $recordid) {
+    function export_file_value(stdClass $record) {
         return null;
     }
 
@@ -3034,7 +3034,7 @@ function data_supports($feature) {
  * @param string $fielddelimiter The delimiter of the csv data.
  * @return int Number of records added.
  */
-function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter, $filestempdir) {
+function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter, $filestempdir = null) {
     global $CFG, $DB;
     // Large files are likely to take their time and memory. Let PHP know
     // that we'll take longer, and that the process should be recycled soon
@@ -3139,6 +3139,9 @@ function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter, $fil
                         }
                         $contentid = $DB->insert_record('data_content', $content);
                         if($field->file_import_supported()) {
+                            if ($filestempdir === null) {
+                                continue;
+                            }
                             $filepath = $filestempdir . '/' . $value;
                             if (!is_file($filepath)) {
                                 debugging('File ' . $filepath . ' could not be found. Continuing to next field.');

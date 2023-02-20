@@ -349,8 +349,55 @@ class data_field_picture extends data_field_base {
     }
 
     function text_export_supported() {
-        return false;
+        return true;
     }
+
+    /**
+     * Here we export the filename which should match the filename of all exported files in the zip archive.
+     *
+     * The filename consists of the record id, an underscore followed by the fieldid, another underscore followed by the
+     *  filename.
+     *
+     * @param string $record
+     * @return string
+     */
+    function export_text_value($record) {
+        return !empty($record->content)
+            ? 'fieldfile_' . $record->id . '_' . $record->fieldid . '_' . $record->content
+            : null;
+    }
+
+    function file_export_supported() {
+        return true;
+    }
+
+    /**
+     * Exports the file for a file export.
+     *
+     * @param stdClass $record the data content record the file belongs to
+     * @return bool|stored_file|null the stored_file to export, null if no file available in this record
+     */
+    function export_file_value($record) {
+        return $this->get_file($record->recordid);
+    }
+
+    function file_import_supported() {
+        return true;
+    }
+
+    function import_file_value($contentid, $filecontent, $filename) {
+        $filerecord = [
+            'contextid' => $this->context->id,
+            'component' => 'mod_data',
+            'filearea' => 'content',
+            'itemid' => $contentid,
+            'filepath' => '/',
+            'filename' => $filename,
+        ];
+        $fs = get_file_storage();
+        $fs->create_file_from_string($filerecord, $filecontent);
+    }
+
 
     function file_ok($path) {
         return true;

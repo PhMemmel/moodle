@@ -86,9 +86,8 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading_with_help(get_string('uploadrecords', 'mod_data'), 'uploadrecords', 'mod_data');
 
 if ($formdata = $form->get_data()) {
-    print_r($formdata);
-    print_r($form->get_new_filename('recordsfile'));
     $uploadedfile = $form->save_temp_file('recordsfile');
+    $filestempdir = null;
 
     if (pathinfo($form->get_new_filename('recordsfile'), PATHINFO_EXTENSION) == 'zip') {
         $packer = get_file_packer();
@@ -121,9 +120,11 @@ if ($formdata = $form->get_data()) {
         $recordsadded = data_import_csv($cm, $data, $csvdata, $formdata->encoding, $formdata->fielddelimiter, $filestempdir);
 
         if ($recordsadded > 0) {
-            echo $OUTPUT->notification($recordsadded. ' '. get_string('recordssaved', 'data'), '');
+            echo $OUTPUT->notification($recordsadded. ' '. get_string('recordssaved', 'data'),
+                \core\output\notification::NOTIFY_SUCCESS);
         } else {
-            echo $OUTPUT->notification(get_string('recordsnotsaved', 'data'), 'notifysuccess');
+            echo $OUTPUT->notification(get_string('recordsnotsaved', 'data'),
+                \core\output\notification::NOTIFY_ERROR);
         }
     }
 
