@@ -340,7 +340,9 @@ class data_field_picture extends data_field_base {
                              'filename'=>'thumb_'.$file->get_filename(), 'userid'=>$file->get_userid());
         try {
             // this may fail for various reasons
-            $fs->convert_image($file_record, $file, (int) $this->field->param4, (int) $this->field->param5, true);
+            $newwidth = isset($this->field->param4) ? (int) $this->field->param4 : null;
+            $newheight = isset($this->field->param5) ? (int) $this->field->param5 : null;
+            $fs->convert_image($file_record, $file, $newwidth, $newheight, true);
             return true;
         } catch (Exception $e) {
             debugging($e->getMessage());
@@ -395,7 +397,8 @@ class data_field_picture extends data_field_base {
             'filename' => $filename,
         ];
         $fs = get_file_storage();
-        $fs->create_file_from_string($filerecord, $filecontent);
+        $file = $fs->create_file_from_string($filerecord, $filecontent);
+        $this->update_thumbnail(null, $file);
     }
 
 
