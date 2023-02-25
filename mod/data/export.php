@@ -126,8 +126,8 @@ if ($mform->is_cancelled()) {
     if ($count > 1) {
         $filename .= 's';
     }
-    $zipwriter = \core_files\archive_writer::get_stream_writer($filename . '.zip',
-        \core_files\archive_writer::ZIP_WRITER);
+
+    $zipexporter = new \mod_data\local\zip_exporter($filename);
 
     foreach ($fieldswithfileexport as $field) {
         $records = $DB->get_records('data_content', ['fieldid' => $field->field->id], '', 'recordid');
@@ -136,17 +136,17 @@ if ($mform->is_cancelled()) {
                 // field of this record seems to be empty, just skip.
                 continue;
             }
-            $pathinzip = '/files/';
+
+            $prefix = '';
             if (empty($formdata['keeporiginalfilenames'])) {
-                $pathinzip .= $field->get_export_file_prefix($record->recordid, $field->field->id);
+                $prefix = $field->get_export_file_prefix($record->recordid, $field->field->id);
             }
-            $pathinzip .= $file->get_filename();
-            $zipwriter->add_file_from_stored_file($pathinzip, $file);
+
+            $zipexporter->add_file_from_string($file->get_filename(), $file->get_content(), $prefix);
         }
     }
-    $zipwriter->add_file_from_string($filename . '.' . $formdata['exporttype'], $exportfilecontent);
-    $zipwriter->finish();
-    exit(0);
+    $zipexporter->add_file_from_string_to_basedir($filename . '.' . $formdata['exporttype'], $exportfilecontent);
+    $zipexporter->send_zip_file();
 }
 
 // Build header to match the rest of the UI.
