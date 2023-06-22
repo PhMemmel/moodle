@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace mod_data\local;
+namespace mod_data\local\exporter;
 
 use file_serving_exception;
 use moodle_exception;
@@ -28,7 +28,7 @@ use zip_archive;
  * @author     Philipp Memmel
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-abstract class exporter {
+abstract class entries_exporter {
 
     /** @var int Tracks the currently edited row of the export data file. */
     private int $currentrow;
@@ -55,7 +55,7 @@ abstract class exporter {
     private array $filenamesinzip;
 
     /**
-     * Creates an exporter object.
+     * Creates an entries_exporter object.
      *
      * This object can be used to export data to different formats including files. If files are added,
      * everything will be bundled up in a zip archive.
@@ -90,7 +90,7 @@ abstract class exporter {
     }
 
     /**
-     * Signal the exporter to finish the current row and jump to the next row.
+     * Signal the entries_exporter to finish the current row and jump to the next row.
      *
      * @return void
      */
@@ -111,7 +111,7 @@ abstract class exporter {
     }
 
     /**
-     * The exporter will prepare a data file from the rows and columns being added.
+     * The entries_exporter will prepare a data file from the rows and columns being added.
      * Overwrite this method to generate the data file as string.
      *
      * @return string the data file as a string
@@ -120,9 +120,9 @@ abstract class exporter {
 
     /**
      * Overwrite the method to return the file extension your data file will have, for example
-     * <code>return 'csv';</code> for a csv file exporter.
+     * <code>return 'csv';</code> for a csv file entries_exporter.
      *
-     * @return string the file extension of the data file your exporter is using
+     * @return string the file extension of the data file your entries_exporter is using
      */
     abstract protected function get_export_data_file_extension(): string;
 
@@ -141,7 +141,7 @@ abstract class exporter {
     }
 
     /**
-     * Use this method to add a file which should be exported to the exporter.
+     * Use this method to add a file which should be exported to the entries_exporter.
      *
      * @param string $filename the name of the file which should be added
      * @param string $filecontent the content of the file as a string

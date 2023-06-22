@@ -102,7 +102,7 @@ function data_export_xls($export, $dataname, $count) {
 }
 
 /**
- * @deprecated since Moodle 4.3, exporting is now being done by \mod_data\local\csv_exporter
+ * @deprecated since Moodle 4.3, exporting is now being done by \mod_data\local\exporter\csv_entries_exporter
  * @global object
  * @param array $export
  * @param string $delimiter_name
@@ -130,7 +130,7 @@ function data_export_csv($export, $delimiter_name, $database, $count, $return=fa
 }
 
 /**
- * @deprecated since Moodle 4.3, exporting is now being done by \mod_data\local\ods_exporter
+ * @deprecated since Moodle 4.3, exporting is now being done by \mod_data\local\exporter\ods_entries_exporter
  * @global object
  * @param array $export
  * @param string $dataname
@@ -168,7 +168,7 @@ function data_export_ods($export, $dataname, $count) {
 }
 
 /**
- * @deprecated since Moodle 4.3, use \mod_data\local\exporter_utils::data_exportdata with a \mod_data\local\exporter object
+ * @deprecated since Moodle 4.3, use \mod_data\local\exporter\utils::data_exportdata with a \mod_data\local\exporter\entries_exporter object
  * @global object
  * @param int $dataid
  * @param array $fields
