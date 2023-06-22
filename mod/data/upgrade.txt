@@ -8,8 +8,8 @@ information provided here is intended especially for developers.
   \mod_data\local\exporter\csv_entries_exporter and \mod_data\local\exporter\ods_entries_exporter (inheriting from
   exporter base class \mod_data\local\exporter\entries_exporter) as well as \mod_data\local\exporter\utils::data_exportdata().
 * Function data_import_csv() has been deprecated and moved to deprecatedlib due to a bigger rework of the way data is
-  being imported. This is now being done by new importer class \mod_data\local\mod_data_csv_importer inheriting from new
-  classes \mod_data\local\csv_importer and \mod_data\local\importer.
+  being imported. This is now being done by new importer class \mod_data\local\importer\csv_importer inheriting from new
+  class \mod_data\local\importer.
 * Field base class now has two new methods file_export_supported() and export_file_value(). The method
   file_export_supported() can be overwritten to declare that a field type can/wants to export a file. In this case this
   field type will have to implement the method export_file_value() returning this file for exporting. Also: This field

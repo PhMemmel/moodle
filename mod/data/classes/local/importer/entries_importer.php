@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace mod_data\local;
+namespace mod_data\local\importer;
 
 use coding_exception;
 use core_php_time_limit;
@@ -29,7 +29,7 @@ use moodle_exception;
  * @author     Philipp Memmel
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-abstract class importer {
+abstract class entries_importer {
 
     /** @var string The import file path of the file which data should be imported from. */
     protected string $importfilepath;
@@ -50,7 +50,7 @@ abstract class importer {
     private string $extracteddir;
 
     /**
-     * Creates an importer object.
+     * Creates an entries_importer object.
      *
      * This object can be used to import data from data files (like csv) and zip archives both including a data file and files to be
      * stored in the course module context.
@@ -71,7 +71,7 @@ abstract class importer {
     }
 
     /**
-     * Return the file extension of the import data file which is being used, for example 'csv' for a csv importer.
+     * Return the file extension of the import data file which is being used, for example 'csv' for a csv entries_importer.
      *
      * @return string the file extension of the export data file
      */
@@ -80,8 +80,9 @@ abstract class importer {
     /**
      * Returns the file content of the data file.
      *
-     * Returns the content of the file directly if the importer's file is a data file itself. If the importer's file is a zip
-     *  archive, the content of the first found data file in the zip archive's root will be returned.
+     * Returns the content of the file directly if the entries_importer's file is a data file itself.
+     *  If the entries_importer's file is a zip archive, the content of the first found data file in the
+     *  zip archive's root will be returned.
      *
      * @return false|string the data file content as string; false, if file cannot be found/read
      * @throws moodle_exception

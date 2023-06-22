@@ -18,7 +18,7 @@ namespace mod_data;
 
 use coding_exception;
 use dml_exception;
-use mod_data\local\mod_data_csv_importer;
+use mod_data\local\importer\csv_entries_importer;
 use moodle_exception;
 use zip_archive;
 
@@ -102,7 +102,7 @@ class import_test extends \advanced_testcase {
             'teacher' => $teacher,
         ] = $this->get_test_data();
 
-        $importer = new mod_data_csv_importer(__DIR__ . '/fixtures/test_data_import.csv',
+        $importer = new csv_entries_importer(__DIR__ . '/fixtures/test_data_import.csv',
             'test_data_import.csv');
         $importer->import_csv($cm, $data, 'UTF-8', 'comma');
 
@@ -134,7 +134,7 @@ class import_test extends \advanced_testcase {
             'student' => $student,
         ] = $this->get_test_data();
 
-        $importer = new mod_data_csv_importer(__DIR__ . '/fixtures/test_data_import_with_userdata.csv',
+        $importer = new csv_entries_importer(__DIR__ . '/fixtures/test_data_import_with_userdata.csv',
             'test_data_import_with_userdata.csv');
         $importer->import_csv($cm, $data, 'UTF-8', 'comma');
 
@@ -175,7 +175,7 @@ class import_test extends \advanced_testcase {
         $fieldrecord->type = 'text';
         $generator->create_field($fieldrecord, $data);
 
-        $importer = new mod_data_csv_importer(__DIR__ . '/fixtures/test_data_import_with_field_username.csv',
+        $importer = new csv_entries_importer(__DIR__ . '/fixtures/test_data_import_with_field_username.csv',
             'test_data_import_with_field_username.csv');
         $importer->import_csv($cm, $data, 'UTF-8', 'comma');
 
@@ -237,7 +237,7 @@ class import_test extends \advanced_testcase {
         $fieldrecord->type = 'text';
         $generator->create_field($fieldrecord, $data);
 
-        $importer = new mod_data_csv_importer(__DIR__ . '/fixtures/test_data_import_with_userdata.csv',
+        $importer = new csv_entries_importer(__DIR__ . '/fixtures/test_data_import_with_userdata.csv',
             'test_data_import_with_userdata.csv');
         $importer->import_csv($cm, $data, 'UTF-8', 'comma');
 
@@ -273,8 +273,8 @@ class import_test extends \advanced_testcase {
     /**
      * Tests the import including files from a zip archive.
      *
-     * @covers \mod_data\local\importer
-     * @covers \mod_data\local\csv_importer
+     * @covers \mod_data\local\importer\entries_importer
+     * @covers \mod_data\local\csv_entries_importer
      * @return void
      * @throws coding_exception
      * @throws moodle_exception
@@ -286,7 +286,7 @@ class import_test extends \advanced_testcase {
             'cm' => $cm,
         ] = $this->get_test_data();
 
-        $importer = new mod_data_csv_importer(__DIR__ . '/fixtures/test_data_import_with_files.zip',
+        $importer = new csv_entries_importer(__DIR__ . '/fixtures/test_data_import_with_files.zip',
             'test_data_import_with_files.zip');
         $importer->import_csv($cm, $data, 'UTF-8', 'comma');
 
@@ -320,15 +320,15 @@ class import_test extends \advanced_testcase {
         $this->assertEquals($filefield->get_file(array_keys($records)[0])->get_content(),
             $filefieldfilecontent);
         fclose($filestream);
-
+        $this->assertCount(1, $importer->get_added_records_messages());
         $ziparchive->close();
     }
 
     /**
      * Tests the import including files from a zip archive.
      *
-     * @covers \mod_data\local\importer
-     * @covers \mod_data\local\csv_importer
+     * @covers \mod_data\local\importer\entries_importer
+     * @covers \mod_data\local\importer\csv_entries_importer
      * @return void
      * @throws coding_exception
      * @throws moodle_exception
@@ -340,7 +340,7 @@ class import_test extends \advanced_testcase {
             'cm' => $cm,
         ] = $this->get_test_data();
 
-        $importer = new mod_data_csv_importer(__DIR__ . '/fixtures/test_data_import_with_files_missing_file.zip',
+        $importer = new csv_entries_importer(__DIR__ . '/fixtures/test_data_import_with_files_missing_file.zip',
             'test_data_import_with_files_missing_file.zip');
         $importer->import_csv($cm, $data, 'UTF-8', 'comma');
 
@@ -352,7 +352,7 @@ class import_test extends \advanced_testcase {
         $this->assertEquals(17, $importedcontent['ID']->content);
         $this->assertFalse(isset($importedcontent['filefield']));
         $this->assertEquals('samplepicture.png', $importedcontent['picturefield']->content);
-
+        $this->assertCount(1, $importer->get_added_records_messages());
         $ziparchive->close();
     }
 
