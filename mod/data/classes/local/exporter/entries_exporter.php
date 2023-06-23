@@ -46,7 +46,7 @@ abstract class entries_exporter {
     private zip_archive $ziparchive;
 
     /** @var bool Tracks the state if the zip archive already has been closed. */
-    private bool $ziparchiveclosed;
+    private bool $isziparchiveclosed;
 
     /** @var string full path of the zip archive. */
     private string $zipfilepath;
@@ -65,7 +65,7 @@ abstract class entries_exporter {
         $this->exportdata = [];
         $this->exportfilename = 'Exportfile';
         $this->filenamesinzip = [];
-        $this->ziparchiveclosed = true;
+        $this->isziparchiveclosed = true;
     }
 
     /**
@@ -188,7 +188,7 @@ abstract class entries_exporter {
             $this->get_data_file_content(), '/');
         $this->finish_zip_archive();
 
-        if ($this->ziparchiveclosed) {
+        if ($this->isziparchiveclosed) {
             if ($sendtouser) {
                 send_file($this->zipfilepath, $this->exportfilename . '.zip', null, 0, false, true);
                 return null;
@@ -252,7 +252,7 @@ abstract class entries_exporter {
         $tmpdir = make_request_directory();
         $this->zipfilepath = $tmpdir . '/' . $this->exportfilename . '.zip';
         $this->ziparchive = new zip_archive();
-        $this->ziparchiveclosed = !$this->ziparchive->open($this->zipfilepath);
+        $this->isziparchiveclosed = !$this->ziparchive->open($this->zipfilepath);
     }
 
     /**
@@ -261,8 +261,8 @@ abstract class entries_exporter {
      * @return void
      */
     private function finish_zip_archive(): void {
-        if (!$this->ziparchiveclosed) {
-            $this->ziparchiveclosed = $this->ziparchive->close();
+        if (!$this->isziparchiveclosed) {
+            $this->isziparchiveclosed = $this->ziparchive->close();
         }
     }
 }
