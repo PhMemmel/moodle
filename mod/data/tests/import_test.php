@@ -274,11 +274,8 @@ class import_test extends \advanced_testcase {
      * Tests the import including files from a zip archive.
      *
      * @covers \mod_data\local\importer\entries_importer
-     * @covers \mod_data\local\csv_entries_importer
+     * @covers \mod_data\local\importer\csv_entries_importer
      * @return void
-     * @throws coding_exception
-     * @throws moodle_exception
-     * @throws dml_exception
      */
     public function test_import_with_files(): void {
         [
@@ -330,9 +327,6 @@ class import_test extends \advanced_testcase {
      * @covers \mod_data\local\importer\entries_importer
      * @covers \mod_data\local\importer\csv_entries_importer
      * @return void
-     * @throws coding_exception
-     * @throws moodle_exception
-     * @throws dml_exception
      */
     public function test_import_with_files_missing_file(): void {
         [

@@ -16,11 +16,8 @@
 
 namespace mod_data\local\exporter;
 
-use coding_exception;
 use context;
 use context_system;
-use dml_exception;
-use moodle_exception;
 
 /**
  * Utility class for exporting data from a mod_data instance.
@@ -48,9 +45,6 @@ class utils {
      * @param bool $tags whether to include tags
      * @param bool $includefiles whether files should be exported as well
      * @return void
-     * @throws coding_exception
-     * @throws dml_exception
-     * @throws moodle_exception
      */
     public static function data_exportdata(int $dataid, array $fields, array $selectedfields, entries_exporter $exporter,
         int $currentgroup = 0, context $context = null, bool $userdetails = false, bool $time = false, bool $approval = false,

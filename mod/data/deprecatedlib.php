@@ -278,9 +278,6 @@ function data_get_exportdata($dataid, $fields, $selectedfields, $currentgroup=0,
  * @param string $encoding The encoding of csv data.
  * @param string $fielddelimiter The delimiter of the csv data.
  * @return int Number of records added.
- * @throws coding_exception
- * @throws dml_exception
- * @throws moodle_exception
  */
 function data_import_csv($cm, $data, &$csvdata, $encoding, $fielddelimiter) {
     debugging('Function data_import_csv has been deprecated. '

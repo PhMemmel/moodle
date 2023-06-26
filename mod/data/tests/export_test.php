@@ -16,10 +16,7 @@
 
 namespace mod_data;
 
-use coding_exception;
 use context_module;
-use dml_exception;
-use file_serving_exception;
 use mod_data\local\exporter\csv_entries_exporter;
 use mod_data\local\exporter\ods_entries_exporter;
 use mod_data\local\exporter\utils;
@@ -40,7 +37,6 @@ class export_test extends \advanced_testcase {
      * In this instance we are setting up database records to be used in the unit tests.
      *
      * @return array of test instances
-     * @throws coding_exception
      */
     protected function get_test_data(): array {
         $this->resetAfterTest(true);
@@ -98,10 +94,6 @@ class export_test extends \advanced_testcase {
      * It also includes more general testing of the functionality of the entries_exporter the csv_entries_exporter
      * is inheriting from.
      *
-     * @throws dml_exception
-     * @throws file_serving_exception
-     * @throws \moodle_exception
-     * @throws coding_exception
      * @covers \mod_data\local\exporter\entries_exporter
      * @covers \mod_data\local\exporter\entries_exporter::get_records_count()
      * @covers \mod_data\local\exporter\entries_exporter::send_file()
@@ -186,12 +178,6 @@ class export_test extends \advanced_testcase {
      *
      * @covers \mod_data\local\exporter\ods_entries_exporter
      * @covers \mod_data\local\exporter\utils::data_exportdata
-     * @throws \OpenSpout\Common\Exception\IOException
-     * @throws \OpenSpout\Reader\Exception\ReaderNotOpenedException
-     * @throws \moodle_exception
-     * @throws coding_exception
-     * @throws dml_exception
-     * @throws file_serving_exception
      */
     public function test_export_ods(): void {
         global $DB;
@@ -248,8 +234,6 @@ class export_test extends \advanced_testcase {
      *
      * @param string $content the file content
      * @return array two-dimensional row/column array with the text content of the first spreadsheet
-     * @throws \OpenSpout\Common\Exception\IOException
-     * @throws \OpenSpout\Reader\Exception\ReaderNotOpenedException
      */
     private function get_ods_rows_content(string $content): array {
         $file = tempnam(make_request_directory(), 'ods_');

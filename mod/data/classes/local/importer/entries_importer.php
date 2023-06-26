@@ -19,7 +19,6 @@ namespace mod_data\local\importer;
 use coding_exception;
 use core_php_time_limit;
 use file_packer;
-use moodle_exception;
 
 /**
  * Importer class for importing data and - if needed - files as well from a zip archive.
@@ -57,7 +56,7 @@ abstract class entries_importer {
      *
      * @param string $importfilepath the complete path of the import file including filename
      * @param string $importfilename the import file name as uploaded by the user
-     * @throws coding_exception
+     * @throws coding_exception if a wrong file type is being used
      */
     public function __construct(string $importfilepath, string $importfilename) {
         $this->importfilepath = $importfilepath;
@@ -85,7 +84,6 @@ abstract class entries_importer {
      *  zip archive's root will be returned.
      *
      * @return false|string the data file content as string; false, if file cannot be found/read
-     * @throws moodle_exception
      */
     public function get_data_file_content(): false|string {
         if ($this->importfiletype !== 'zip') {
@@ -110,7 +108,6 @@ abstract class entries_importer {
      * @param string $filename
      * @param string $zipsubdir
      * @return false|string the file content as string, false if the file could not be found/read
-     * @throws moodle_exception
      */
     public function get_file_content_from_zip(string $filename, string $zipsubdir = 'files/'): false|string {
         if (empty($filename)) {
@@ -130,7 +127,6 @@ abstract class entries_importer {
      * Extracts (if not already done and if we have a zip file to deal with) the zip file to a temporary directory.
      *
      * @return void
-     * @throws moodle_exception
      */
     private function extract_zip(): void {
         if ($this->zipfileextracted || $this->importfiletype !== 'zip') {

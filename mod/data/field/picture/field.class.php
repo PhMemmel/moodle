@@ -398,8 +398,6 @@ class data_field_picture extends data_field_base {
      * @param string $filecontent the content of the file to import as string
      * @param string $filename the filename the imported file should get
      * @return void
-     * @throws file_exception
-     * @throws stored_file_creation_exception
      */
     public function import_file_value(int $contentid, string $filecontent, string $filename): void {
         $filerecord = [

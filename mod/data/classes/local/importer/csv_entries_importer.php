@@ -16,13 +16,11 @@
 
 namespace mod_data\local\importer;
 
-use coding_exception;
 use context_module;
 use core_php_time_limit;
 use core_tag_tag;
 use core_user;
 use csv_import_reader;
-use dml_exception;
 use moodle_exception;
 use stdClass;
 
@@ -56,8 +54,6 @@ class csv_entries_importer extends entries_importer {
      * @param string $encoding The encoding of csv data.
      * @param string $fielddelimiter The delimiter of the csv data.
      *
-     * @throws coding_exception
-     * @throws dml_exception
      * @throws moodle_exception
      */
     public function import_csv(stdClass $cm, stdClass $data, string $encoding, string $fielddelimiter): void {
