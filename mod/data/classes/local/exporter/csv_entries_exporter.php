@@ -46,6 +46,9 @@ class csv_entries_exporter extends entries_exporter {
      * @see \mod_data\local\exporter\entries_exporter::get_data_file_content()
      */
     public function get_data_file_content(): string {
+        global $CFG;
+        require_once($CFG->libdir . '/csvlib.class.php');
+
         return csv_export_writer::print_array($this->exportdata, $this->delimitername, '"', true);
     }
 
