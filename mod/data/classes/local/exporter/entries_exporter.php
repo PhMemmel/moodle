@@ -215,6 +215,9 @@ abstract class entries_exporter {
         if (!str_ends_with($zipsubdir, '/')) {
             $zipsubdir .= '/';
         }
+        if (empty($filename)) {
+            return false;
+        }
         return in_array($zipsubdir . $filename, $this->filenamesinzip, true);
     }
 
@@ -231,13 +234,19 @@ abstract class entries_exporter {
         if (!$this->file_exists($filename)) {
             return $filename;
         }
-        $i = 1;
 
+        $extension = pathinfo($filename, PATHINFO_EXTENSION);
+        $filenamewithoutextension = empty($extension)
+            ? $filename
+            : substr($filename, 0,strlen($filename) - strlen($extension) - 1);
+        $filenamewithoutextension = $filenamewithoutextension . '_1';
+        $i = 1;
+        $filename = empty($extension) ? $filenamewithoutextension : $filenamewithoutextension . '.' . $extension;
         while ($this->file_exists($filename)) {
-            $extension = pathinfo($filename, PATHINFO_EXTENSION);
-            $filenamewithoutextension = substr($filename, 0,
-                strlen($filename) - strlen($extension) - 1);
-            $filename = $filenamewithoutextension . '_' . $i . '.' . $extension;
+            // In case we have already a file ending with '_XX' where XX is an ascending number, we have to
+            // remove '_XX' first before adding '_YY' again where YY is the successor of XX.
+            $filenamewithoutextension = preg_replace('/_' . $i . '$/', '_' . ($i + 1), $filenamewithoutextension);
+            $filename = empty($extension) ? $filenamewithoutextension : $filenamewithoutextension . '.' . $extension;
             $i++;
         }
         return $filename;
