@@ -29,7 +29,7 @@ use mod_data\local\exporter\utils;
  * @author     Philipp Memmel
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class export_test extends \advanced_testcase {
+class entries_export_test extends \advanced_testcase {
 
     /**
      * Get the test data.
@@ -226,7 +226,7 @@ class export_test extends \advanced_testcase {
         $this->assertEquals('picturefile.png', $odsrows[1][4]);
 
         // As the logic of renaming the files and building a zip archive is implemented in entries_exporter class, we do
-        // not need to test this for the ods_entries_exporter, because export_test::test_export_csv already does this.
+        // not need to test this for the ods_entries_exporter, because entries_export_test::test_export_csv already does this.
     }
 
     /**
