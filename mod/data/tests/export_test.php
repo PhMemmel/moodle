@@ -205,7 +205,7 @@ class export_test extends \advanced_testcase {
         $tags = false;
         // We first test the export without exporting files.
         // This means file and picture fields will be exported, but only as text (which is the filename),
-        // so we will receive a csv export file.
+        // so we will receive an ods export file.
         $includefiles = false;
         utils::data_exportdata($data->id, $fields, $selectedfields, $exporter, $currentgroup, $context,
             $exportuser, $exporttime, $exportapproval, $tags, $includefiles);
