@@ -373,4 +373,54 @@ class entries_import_test extends \advanced_testcase {
         }
         return $records;
     }
+
+    /**
+     * Tests if the amount of imported records is counted properly.
+     *
+     * @covers \mod_data\local\importer\csv_entries_importer::import_csv
+     * @covers \mod_data\local\importer\csv_entries_importer::get_added_records_messages
+     * @dataProvider get_added_record_messages_provider
+     * @param string $datafilecontent the content of the datafile to test as string
+     * @param int $expectedcount the expected count of messages depending on the datafile content
+     */
+    public function test_get_added_record_messages(string $datafilecontent, int $expectedcount): void {
+        [
+            'data' => $data,
+            'cm' => $cm,
+        ] = $this->get_test_data();
+
+        // First we need to create the zip file from the provided data.
+        $tmpdir = make_request_directory();
+        $datafile = $tmpdir . '/entries_import_test_datafile_tmp_' . time() . '.csv';
+        file_put_contents($datafile, $datafilecontent);
+
+        $importer = new csv_entries_importer($datafile, 'testdatafile.csv');
+        $importer->import_csv($cm, $data, 'UTF-8', 'comma');
+        $this->assertEquals($expectedcount, count($importer->get_added_records_messages()));
+    }
+
+    /**
+     * Data provider method for self::test_get_added_record_messages.
+     *
+     * @return array data for testing
+     */
+    public function get_added_record_messages_provider(): array {
+        return [
+            'only header' => [
+                'datafilecontent' => 'ID,Param2,filefield,picturefield' . PHP_EOL,
+                'expectedcount' => 0 // One line is being assumed to be the header.
+            ],
+            'one record' => [
+                'datafilecontent' => 'ID,Param2,filefield,picturefield' . PHP_EOL
+                    . '5,"some short text",testfilename.pdf,testpicture.png',
+                'expectedcount' => 1
+            ],
+            'two records' => [
+                'datafilecontent' => 'ID,Param2,filefield,picturefield' . PHP_EOL
+                    . '5,"some short text",testfilename.pdf,testpicture.png' . PHP_EOL
+                    . '3,"other text",testfilename2.pdf,testpicture2.png',
+                'expectedcount' => 2
+            ],
+        ];
+    }
 }
