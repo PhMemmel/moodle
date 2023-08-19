@@ -155,19 +155,24 @@ class format_singleactivity extends core_courseformat\base {
         if ($fetchtypes) {
             $availabletypes = $this->get_supported_activities();
             if ($this->courseid) {
-                // The course exists. Test against the course.
-                $testcontext = context_course::instance($this->courseid);
-            } else if ($this->categoryid) {
-                // The course does not exist yet, but we have a category ID that we can test against.
-                $testcontext = context_coursecat::instance($this->categoryid);
-            } else {
-                // The course does not exist, and we somehow do not have a category. Test capabilities against the system context.
-                $testcontext = context_system::instance();
+                // The course exists.
+                $coursecontext = context_course::instance($this->courseid);
             }
+
             foreach (array_keys($availabletypes) as $activity) {
                 $capability = "mod/{$activity}:addinstance";
-                if (!has_capability($capability, $testcontext)) {
-                    unset($availabletypes[$activity]);
+                if (!empty($coursecontext)) {
+                    // We have a course already, so we can directly check the capabilities.
+                    if (!has_capability($capability, $coursecontext)) {
+                        unset($availabletypes[$activity]);
+                    }
+                } else if ($this->categoryid) {
+                    // We do not have a course yet, so we guess if the user will have the capability to add the activity after
+                    // creating the course.
+                    $categorycontext = \context_coursecat::instance($this->categoryid);
+                    if (!guess_if_creator_will_have_course_capability($capability, $categorycontext)) {
+                        unset($availabletypes[$activity]);
+                    }
                 }
             }
         }
