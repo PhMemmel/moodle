@@ -157,10 +157,11 @@ function user_update_user($user, $updatepassword = true, $triggerevent = true) {
         $user = (object) $user;
     }
 
+    $currentrecord = $DB->get_record('user', ['id' => $user->id]);
+
     // Communication api update for user.
     if (core_communication\api::is_available()) {
         $usercourses = enrol_get_users_courses($user->id);
-        $currentrecord = $DB->get_record('user', ['id' => $user->id]);
         if (!empty($currentrecord) && isset($user->suspended) && $currentrecord->suspended !== $user->suspended) {
             foreach ($usercourses as $usercourse) {
                 $communication = \core_communication\api::load_by_instance(
@@ -208,8 +209,6 @@ function user_update_user($user, $updatepassword = true, $triggerevent = true) {
         unset($user->calendartype);
     }
 
-    $user->timemodified = time();
-
     // Validate user data object.
     $uservalidation = core_user::validate($user);
     if ($uservalidation !== true) {
@@ -219,7 +218,17 @@ function user_update_user($user, $updatepassword = true, $triggerevent = true) {
         }
     }
 
-    $DB->update_record('user', $user);
+    $changedattributes = [];
+    foreach ($user as $attributekey => $attributevalue) {
+        if (!isset($currentrecord->{$attributekey}) || $currentrecord->{$attributekey} !== $attributevalue) {
+            $changedattributes[$attributekey] = $attributevalue;
+            break;
+        }
+    }
+    if (!empty($changedattributes)) {
+        $user->timemodified = time();
+        $DB->update_record('user', $user);
+    }
 
     if ($updatepassword) {
         // Get full user record.
