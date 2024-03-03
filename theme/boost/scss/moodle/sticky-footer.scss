@@ -18,6 +18,9 @@ body {
     overflow: hidden;
     box-shadow: 0 0 1rem rgba($black, .15);
     font-size: calc(#{$font-size-base} * 1.10);
+    .form-group {
+        flex-grow: .2;
+    }
 }
 
 .hasstickyfooter .stickyfooter {
