@@ -58,7 +58,7 @@ module.exports = grunt => {
                                 cwd: grunt.moodleEnv.fullRunDir,
                                 stdio: 'inherit'
                             },
-                            args: [task, filesOption]
+                            args: [task, filesOption, '--force']
                         },
                         function(err, res, code) {
                             if (code !== 0) {
