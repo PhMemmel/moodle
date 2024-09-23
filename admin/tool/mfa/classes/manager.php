@@ -107,12 +107,12 @@ class manager {
             }
 
             // Status.
-            $OUTPUT = $PAGE->get_renderer('tool_mfa');
+            $renderer = $PAGE->get_renderer('tool_mfa');
             // If toggle has been flipped, fall to default pending badge.
             if ($weighttoggle) {
-                $state = $OUTPUT->get_state_badge('');
+                $state = $renderer->get_state_badge('');
             } else {
-                $state = $OUTPUT->get_state_badge($factor->get_state());
+                $state = $renderer->get_state_badge($factor->get_state());
             }
 
             $table->data[] = [
@@ -135,7 +135,7 @@ class manager {
             '',
             '<b>' . get_string('overall', 'tool_mfa') . '</b>',
             self::get_cumulative_weight(),
-            $OUTPUT->get_state_badge($finalstate),
+            $renderer->get_state_badge($finalstate),
         ];
 
         $html .= \html_writer::table($table);

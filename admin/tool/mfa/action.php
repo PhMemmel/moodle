@@ -78,7 +78,6 @@ switch ($action) {
         }
 
         $PAGE->navbar->add(get_string('setupfactor', 'factor_'.$factor));
-        $OUTPUT = $PAGE->get_renderer('tool_mfa');
         $form = new setup_factor_form($currenturl, ['factorname' => $factor]);
 
         if ($form->is_submitted()) {
@@ -114,7 +113,6 @@ switch ($action) {
         }
 
         $PAGE->navbar->add(get_string('action:revoke', 'factor_'.$factor));
-        $OUTPUT = $PAGE->get_renderer('tool_mfa');
 
         $revokeparams = [
             'factorname' => $factorobject->get_display_name(),

@@ -43,7 +43,7 @@ if ($node = $PAGE->settingsnav->find('usercurrentsettings', null)) {
     $PAGE->navbar->add($node->get_content(), $node->action());
 }
 $PAGE->navbar->add(get_string('preferences:header', 'tool_mfa'), new \moodle_url('/admin/tool/mfa/user_preferences.php'));
-$OUTPUT = $PAGE->get_renderer('tool_mfa');
+$renderer = $PAGE->get_renderer('tool_mfa');
 
 echo $OUTPUT->header();
 if (!empty($action)) {
@@ -58,10 +58,9 @@ if (!empty($action)) {
     }
 }
 
-echo $OUTPUT->active_factors();
-echo $OUTPUT->available_factors();
+echo $renderer->active_factors();
+echo $renderer->available_factors();
 
-$renderer = $PAGE->get_renderer('tool_mfa');
 echo $renderer->get_support_link();
 
 \tool_mfa\manager::display_debug_notification();
