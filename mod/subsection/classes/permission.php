@@ -42,7 +42,11 @@ class permission {
         if (!array_key_exists('subsection', \core_plugin_manager::instance()->get_enabled_plugins('mod'))) {
             return false;
         }
-        if (!has_capability('mod/subsection:addinstance', context_course::instance($section->course), $userid)) {
+        $coursecontext = context_course::instance($section->course);
+        if (!has_capability('mod/subsection:addinstance', $coursecontext, $userid)) {
+            return false;
+        }
+        if (!has_capability('moodle/course:manageactivities', $coursecontext, $userid)) {
             return false;
         }
         if ($section->is_delegated()) {
