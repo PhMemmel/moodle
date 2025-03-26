@@ -1178,7 +1178,7 @@ class stateactions {
         \core\deprecation::emit_deprecation([self::class, __FUNCTION__]);
 
         $coursecontext = context_course::instance($course->id);
-        require_capability('moodle/course:update', $coursecontext);
+        require_capability('moodle/course:manageactivities', $coursecontext);
 
         // Method "can_add_moduleinfo" called in "prepare_new_moduleinfo_data" will handle the capability checks.
         [, , , , $moduleinfo] = prepare_new_moduleinfo_data($course, $modname, $targetsectionnum);
@@ -1209,7 +1209,7 @@ class stateactions {
         require_once($CFG->dirroot . '/course/modlib.php');
 
         $coursecontext = context_course::instance($course->id);
-        require_capability('moodle/course:update', $coursecontext);
+        require_capability('moodle/course:manageactivities', $coursecontext);
 
         $modinfo = get_fast_modinfo($course);
         $section = $modinfo->get_section_info_by_id($targetsectionid, MUST_EXIST);
