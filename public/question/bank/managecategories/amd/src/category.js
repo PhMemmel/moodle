@@ -24,6 +24,7 @@ import {BaseComponent, DragDrop} from 'core/reactive';
 import {categorymanager} from 'qbank_managecategories/categorymanager';
 import Templates from 'core/templates';
 import Modal from "core/modal";
+import {getList} from 'core/normalise';
 import {get_string as getString} from "core/str";
 import {eventTypes as inplaceEditableEventTypes} from 'core/local/inplace_editable/events';
 
@@ -335,7 +336,7 @@ export default class extends BaseComponent {
         const categories = [];
         if (item.children) {
             let precedingSibling = null;
-            item.children.forEach(category => {
+            getList(item.children).forEach(category => {
                 const categoryId = parseInt(category.dataset.categoryid);
                 // Don't create a target for the category that's moving.
                 if (categoryId === movingCategoryId) {
