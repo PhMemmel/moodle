@@ -23,6 +23,7 @@
 import Templates from 'core/templates';
 import Notification from 'core/notification';
 import Pending from 'core/pending';
+import {getList} from 'core/normalise';
 
 const regionSelector = '.toast-wrapper';
 
@@ -126,7 +127,7 @@ export const removeToastRegion = async(parent, newParent = document) => {
     if (regionToRemove) {
         const targetRegion = getRegionFromParent(newParent);
 
-        regionToRemove.children.forEach((node) => {
+        getList(regionToRemove.children).forEach((node) => {
             targetRegion.insertBefore(node, targetRegion.firstChild);
         });
 
