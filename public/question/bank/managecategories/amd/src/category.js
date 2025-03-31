@@ -335,7 +335,7 @@ export default class extends BaseComponent {
         const categories = [];
         if (item.children) {
             let precedingSibling = null;
-            item.children.forEach(category => {
+            [...item.children].forEach(category => {
                 const categoryId = parseInt(category.dataset.categoryid);
                 // Don't create a target for the category that's moving.
                 if (categoryId === movingCategoryId) {
