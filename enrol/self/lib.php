@@ -958,8 +958,15 @@ class enrol_self_plugin extends enrol_plugin {
 
         // Course welcome message.
         if (has_any_capability(['enrol/self:config', 'moodle/course:editcoursewelcomemessage'], $context)) {
+            $options = enrol_send_welcome_email_options();
+            if (empty($CFG->coursecontact)) {
+                unset($options[ENROL_SEND_EMAIL_FROM_COURSE_CONTACT]);
+            }
+            if (empty(get_users_by_capability($context, 'enrol/self:holdkey'))) {
+                unset($options[ENROL_SEND_EMAIL_FROM_KEY_HOLDER]);
+            }
             $mform->addElement('select', 'customint4', get_string('sendcoursewelcomemessage', 'enrol_self'),
-                    enrol_send_welcome_email_options());
+                    $options);
             $mform->addHelpButton('customint4', 'sendcoursewelcomemessage', 'enrol_self');
 
             $options = [
