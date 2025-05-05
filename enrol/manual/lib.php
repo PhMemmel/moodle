@@ -623,6 +623,15 @@ class enrol_manual_plugin extends enrol_plugin {
 
         // Course welcome message.
         if (has_any_capability(['enrol/manual:config', 'moodle/course:editcoursewelcomemessage'], $context)) {
+            $options = enrol_send_welcome_email_options();
+            $course = get_course($context->instanceid);
+            $courselistelement = new core_course_list_element($course);
+            if (!$courselistelement->has_course_contacts()) {
+                unset($options[ENROL_SEND_EMAIL_FROM_COURSE_CONTACT]);
+            }
+            if (empty(get_users_by_capability($context, 'enrol/self:holdkey'))) {
+                unset($options[ENROL_SEND_EMAIL_FROM_KEY_HOLDER]);
+            }
             $mform->addElement(
                 'select',
                 'customint1',
@@ -630,7 +639,7 @@ class enrol_manual_plugin extends enrol_plugin {
                     identifier: 'sendcoursewelcomemessage',
                     component: 'core_enrol',
                 ),
-                enrol_send_welcome_email_options(),
+                $options
             );
             $mform->addHelpButton(
                 elementname: 'customint1',
