@@ -305,7 +305,7 @@ class question_bank_helper {
                 GROUP BY cm.id, cm.course
                 {$orderbysql}";
 
-        $rs = $DB->get_recordset_sql($sql, $params, limitnum: $limit);
+        $rs = $DB->get_recordset_sql($sql, $params);
         $banks = [];
 
         foreach ($rs as $cm) {
@@ -319,6 +319,9 @@ class question_bank_helper {
             }
             // Populate the raw record.
             $banks[] = self::get_formatted_bank($cm, $currentbankid, filtercontext: $filtercontext);
+            if (!empty($limit) && count($banks) === $limit) {
+                break;
+            }
         }
         $rs->close();
 
