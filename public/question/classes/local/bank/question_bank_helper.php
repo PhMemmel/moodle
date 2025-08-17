@@ -19,6 +19,7 @@ namespace core_question\local\bank;
 use cm_info;
 use context;
 use context_course;
+use core\context_helper;
 use core\task\manager;
 use moodle_url;
 use stdClass;
@@ -222,10 +223,20 @@ class question_bank_helper {
         string $search = '',
         int $limit = 0,
     ): array {
-        global $DB;
+        global $DB, $USER;
 
         $pluginssql = [];
         $params = [];
+
+        if ($getcategories || !empty($havingcap)) {
+            $contextselect = ', ' . context_helper::get_preload_record_columns_sql('c');
+            $contextsql = ' JOIN {context} c ON c.instanceid = cm.id AND c.contextlevel = ' . CONTEXT_MODULE . ' ';
+            $contextgroupby = ', ' . implode(', ', array_values(context_helper::get_preload_record_columns('c')));
+        } else {
+            $contextselect = '';
+            $contextsql = '';
+            $contextgroupby = '';
+        }
 
         // Build the SELECT portion of the SQL and include question category joins as required.
         if ($getcategories) {
@@ -237,8 +248,7 @@ class question_bank_helper {
             );
             $groupconcat = $DB->sql_group_concat($concat, self::CATEGORY_SEPARATOR);
             $select = "SELECT cm.id, cm.course, {$groupconcat} AS cats";
-            $catsql = ' JOIN {context} c ON c.instanceid = cm.id AND c.contextlevel = ' . CONTEXT_MODULE .
-                ' JOIN {question_categories} qc ON qc.contextid = c.id AND qc.parent <> 0';
+            $catsql = ' JOIN {question_categories} qc ON qc.contextid = c.id AND qc.parent <> 0';
         } else {
             $select = 'SELECT cm.id, cm.course';
             $catsql = '';
@@ -290,28 +300,72 @@ class question_bank_helper {
 
         // Optionally order the results by the requested bank id.
         if (!empty($currentbankid)) {
-            $orderbysql = " ORDER BY CASE WHEN cm.id = :currentbankid THEN 0 ELSE 1 END ASC, cm.id DESC ";
+            $orderbysql = " ORDER BY CASE WHEN cm.id = :currentbankid THEN 0 ELSE 1 END ASC ";
             $params['currentbankid'] = $currentbankid;
         } else {
             $orderbysql = '';
         }
 
-        $sql = "{$select}
+        if ($limit !== 0 && !empty($havingcap)) {
+            // Now it's becoming "creative".
+            // The basic issue we are facing is that we cannot limit the SQL because we have to filter the records for capabilities
+            // afterward. Especially on bigger instances checking each qbank instance for capabilities one by one is quite expensive.
+            // That's why we're using a heuristic here and sort qbank instances to the top where the user has a course level
+            // role with the provided capabilities (typically "editingteacher"), hoping that we "fill up" the given limit as fast as
+            // possible and that we can return early without having checked all qbank instances negatively for the required
+            // capabilities.
+            // To get the ordering done we left join the role_assignments table and sort null values for ra.id to the bottom.
+            $roleids = [];
+            $courseroles = get_roles_for_contextlevels(CONTEXT_COURSE);
+            foreach ($havingcap as $cap) {
+                foreach (get_roles_with_capability($cap, CAP_ALLOW) as $role) {
+                    if (in_array($role->id, array_map(fn($courserole) => $courserole->id, $courseroles))) {
+                        $roleids[] = $role->id;
+                    }
+                }
+            }
+            if (empty($roleids)) {
+                $roleinsql = '';
+            } else {
+                [$roleinsql, $roleinparams] = $DB->get_in_or_equal($roleids, SQL_PARAMS_NAMED);
+                $params = array_merge($params, $roleinparams);
+                $roleinsql = " AND ra.roleid {$roleinsql}";
+            }
+            $heuristicorderingsql =
+                    " JOIN {context} co ON co.instanceid = cm.course AND co.contextlevel = " . CONTEXT_COURSE . "
+                LEFT JOIN {role_assignments} ra ON ra.contextid = co.id AND ra.userid = :userid {$roleinsql}";
+            $heuristicorderingorderby = empty($orderbysql) ? "ORDER BY ra.id DESC" : ", ra.id DESC";
+            $heuristicordergroupby = ", ra.id ";
+            $params['userid'] = $USER->id;
+        } else {
+            $heuristicorderingsql = '';
+            $heuristicordergroupby = '';
+        }
+        $orderbysql =
+                empty($heuristicorderingorderby) ? $orderbysql . ', cm.id' : $orderbysql . $heuristicorderingorderby . ", cm.id";
+
+        $sql = "{$select} {$contextselect}
                 FROM {course_modules} cm
-                JOIN {modules} m ON m.id = cm.module
+                JOIN {modules} m ON m.id = cm.module 
                 {$pluginssql}
+                {$contextsql}
                 {$catsql}
+                {$heuristicorderingsql}
                 WHERE 1=1 {$notincoursesql} {$incoursesql}
-                GROUP BY cm.id, cm.course
+                GROUP BY cm.id, cm.course {$contextgroupby} {$heuristicordergroupby}
                 {$orderbysql}";
 
-        $rs = $DB->get_recordset_sql($sql, $params, limitnum: $limit);
+        $limitforsql = $limit !== 0 && !empty($havingcap) ? 0 : $limit;
+        $rs = $DB->get_recordset_sql($sql, $params, limitnum: $limitforsql);
         $banks = [];
 
         foreach ($rs as $cm) {
             // If capabilities have been supplied as a method argument then ensure the viewing user has at least one of those
             // capabilities on the module itself.
             if (!empty($havingcap)) {
+                // We can preload because we made sure that in case of capabilities being passed we have the context joined in the
+                // SQL.
+                context_helper::preload_from_record($cm);
                 $context = \context_module::instance($cm->id);
                 if (!(new question_edit_contexts($context))->have_one_cap($havingcap)) {
                     continue;
@@ -319,6 +373,9 @@ class question_bank_helper {
             }
             // Populate the raw record.
             $banks[] = self::get_formatted_bank($cm, $currentbankid, filtercontext: $filtercontext);
+            if (!empty($limit) && count($banks) === $limit) {
+                break;
+            }
         }
         $rs->close();
 
