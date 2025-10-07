@@ -45,10 +45,12 @@ module.exports = grunt => {
                 function(task, next) {
                     var files = queueToProcess[task];
                     var filesOption = '--files=' + files.join(',');
+                    var forceOption = grunt.option('force') ? '--force' : '';
                     grunt.log.ok('Running task ' + task + ' for files ' + filesOption);
 
                     // Spawn the task in a child process so that it doesn't kill this one
                     // if it failed.
+                    var args = [task, filesOption, forceOption];
                     grunt.util.spawn(
                         {
                             // Spawn with the grunt bin.
@@ -58,7 +60,7 @@ module.exports = grunt => {
                                 cwd: grunt.moodleEnv.fullRunDir,
                                 stdio: 'inherit'
                             },
-                            args: [task, filesOption]
+                            args: args
                         },
                         function(err, res, code) {
                             if (code !== 0) {
