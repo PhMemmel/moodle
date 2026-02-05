@@ -492,7 +492,7 @@ export default class {
                 }
             });
             // Now remove the disabled options, and hide the select list of there is only one option left.
-            joinField.options.forEach((element, index) => {
+            Array.from(joinField.options).forEach((element, index) => {
                 if (element.disabled) {
                     joinField.options[index] = null;
                 }
