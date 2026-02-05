@@ -200,7 +200,7 @@ export default class {
         const files = [];
         // Browsers do not provide the file list until the drop event.
         if (dataTransfer.files?.length > 0) {
-            dataTransfer.files.forEach(file => {
+            Array.from(dataTransfer.files).forEach(file => {
                 files.push(file);
             });
         }
