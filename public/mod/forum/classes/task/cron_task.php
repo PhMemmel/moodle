@@ -80,6 +80,19 @@ class cron_task extends \core\task\scheduled_task {
     protected $adhocdata = [];
 
     /**
+     * @var array Lightweight course module data cached per forum id.
+     *
+     * Populated once in fill_user_subscription_cache() and reused in
+     * fetch_posts_for_user() to avoid calling get_fast_modinfo() inside
+     * the per-user loop. Each call to get_fast_modinfo() after a user
+     * switch creates a new course_modinfo object whose circular references
+     * with cm_info (cm_info->modinfo / modinfo->cms) prevent PHP's
+     * refcount GC from freeing it, causing memory to grow linearly with
+     * user count.
+     */
+    protected $forumcm = [];
+
+    /**
      * Get a descriptive name for this task (shown to admins).
      *
      * @return string
@@ -298,6 +311,15 @@ class cron_task extends \core\task\scheduled_task {
             $cm = get_fast_modinfo($this->courses[$forum->course])->instances['forum'][$forum->id];
             $modcontext = \context_module::instance($cm->id);
 
+            // Store lightweight cm data to avoid per-user get_fast_modinfo() calls
+            // in fetch_posts_for_user(). See $forumcm property docblock for details.
+            $this->forumcm[$forum->id] = (object) [
+                'id' => $cm->id,
+                'course' => $cm->course,
+                'groupmode' => $cm->groupmode,
+                'groupingid' => $cm->groupingid,
+            ];
+
             $this->subscribedusers[$forum->id] = [];
             if ($users = \mod_forum\subscriptions::fetch_subscribed_users($forum, 0, $modcontext, 'u.id, u.maildigest', true)) {
                 foreach ($users as $user) {
@@ -429,7 +451,9 @@ class cron_task extends \core\task\scheduled_task {
 
                 $subscriptiontime = \mod_forum\subscriptions::fetch_discussion_subscription($forum->id, $user->id);
 
-                $cm = get_fast_modinfo($course)->instances['forum'][$forumid];
+                // Use pre-cached lightweight cm data to avoid calling get_fast_modinfo()
+                // per user. See $forumcm property docblock for details.
+                $cm = $this->forumcm[$forumid];
                 foreach ($discussionids as $discussionid => $postids) {
                     $discussion = $this->discussions[$discussionid];
                     if (!\mod_forum\subscriptions::is_subscribed($user->id, $forum, $discussionid, $cm)) {
