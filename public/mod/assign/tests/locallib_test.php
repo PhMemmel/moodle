@@ -1699,6 +1699,53 @@ final class locallib_test extends \advanced_testcase {
         $this->assertEquals(2, $assign->count_submissions_with_status_and_groups(ASSIGN_SUBMISSION_STATUS_SUBMITTED));
     }
 
+    public function test_count_submissions_with_status_and_groups_suspended_users(): void {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $assign = $this->create_instance($course, [
+            'assignsubmission_onlinetext_enabled' => 1,
+        ]);
+
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+
+        // Create 3 active students that submit.
+        for ($i = 0; $i < 3; $i++) {
+            $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+            $this->add_submission($student, $assign);
+            $this->submit_for_grading($student, $assign);
+        }
+
+        // Create 2 suspended students that submit.
+        for ($i = 0; $i < 2; $i++) {
+            $suspendedstudent = $this->getDataGenerator()->create_and_enrol(
+                $course,
+                'student',
+                null,
+                'manual',
+                0,
+                0,
+                ENROL_USER_SUSPENDED
+            );
+            $this->add_submission($suspendedstudent, $assign);
+            $this->submit_for_grading($suspendedstudent, $assign);
+        }
+
+        // As editing teacher with preference set to show only active enrolments (default).
+        $this->setUser($teacher);
+        set_user_preference('grade_report_showonlyactiveenrol', true);
+        $this->assertEquals(3, $assign->count_submissions_with_status_and_groups(
+            ASSIGN_SUBMISSION_STATUS_SUBMITTED
+        ));
+
+        // Now set the preference to include suspended users.
+        set_user_preference('grade_report_showonlyactiveenrol', false);
+        $assign = new \assign($assign->get_context(), $assign->get_course_module(), $course);
+        $this->assertEquals(5, $assign->count_submissions_with_status_and_groups(
+            ASSIGN_SUBMISSION_STATUS_SUBMITTED
+        ));
+    }
+
     public function test_count_submissions_need_grading_with_groups(): void {
         $this->resetAfterTest();
 

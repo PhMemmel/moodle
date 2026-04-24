@@ -2874,7 +2874,8 @@ class assign {
         } else {
             // Individual submission: only count submissions from users currently enrolled in the course.
             // When $groupids is non-empty, it also filters by group membership.
-            [$esql, $eparams] = get_enrolled_sql($this->get_context(), '', $groupids, false);
+            // Respect the 'show only active users' setting to exclude suspended users when appropriate.
+            [$esql, $eparams] = get_enrolled_sql($this->get_context(), '', $groupids, $this->show_only_active_users());
             $params += $eparams;
             $sql = "SELECT COUNT(DISTINCT s.userid)
                       FROM {assign_submission} s
