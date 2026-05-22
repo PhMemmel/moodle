@@ -59,13 +59,21 @@ class message_output_sms extends message_output {
 
     #[\Override]
     public function is_user_configured($user = null): bool {
+        global $USER;
+
+        if (is_null($user)) {
+            $user = $USER;
+        }
+
         if (empty($user)) {
             return false;
         }
 
         // Skip any SMS if user doesn't have a mobile number.
         if (empty($user->phone2)) {
-            mtrace('No mobile number found for userid: ' . $user->id);
+            if (CLI_SCRIPT) {
+                mtrace('No mobile number found for userid: ' . $user->id);
+            }
             return false;
         }
 
@@ -75,7 +83,9 @@ class message_output_sms extends message_output {
             $user->suspended ||
             $user->deleted
         ) {
-            mtrace('The user with userid: ' . $user->id . ' is either deleted or suspended. Can not send SMS.');
+            if (CLI_SCRIPT) {
+                mtrace('The user with userid: ' . $user->id . ' is either deleted or suspended. Can not send SMS.');
+            }
             return false;
         }
 
