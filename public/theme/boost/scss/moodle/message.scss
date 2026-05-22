@@ -85,20 +85,6 @@
     }
 }
 
-.disabled-message {
-    display: none;
-}
-
-.disabled {
-    .disabled-message {
-        display: block;
-
-        + form {
-            display: none;
-        }
-    }
-}
-
 .general-settings-container {
     .loading-icon {
         display: none;
