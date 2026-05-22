@@ -33605,17 +33605,6 @@ a.ygtvspacer:hover {
   display: block;
 }
 
-.disabled-message {
-  display: none;
-}
-
-.disabled .disabled-message {
-  display: block;
-}
-.disabled .disabled-message + form {
-  display: none;
-}
-
 .general-settings-container .loading-icon {
   display: none;
 }
