@@ -1271,7 +1271,40 @@ function markdown_to_html($text) {
         return $text;
     }
 
-    return \Michelf\MarkdownExtra::defaultTransform($text);
+    // Reuse a single configured parser instance across calls (mirrors the caching
+    // that MarkdownExtra::defaultTransform() does internally).
+    static $markdown = null;
+    if ($markdown === null) {
+        // The following override only runs for fenced code blocks. For a plain fence
+        // ("```" without language), MarkdownExtra passes an empty token in
+        // $matches[2], which we map to "none" before calling the parent
+        // callback. Together with the parser config below, this yields
+        // <pre class="language-none"><code>...</code></pre> while leaving
+        // existing raw HTML <pre><code> blocks in the input untouched.
+        $markdown = new class extends \Michelf\MarkdownExtra {
+            #[\Override]
+            // The underscore prefix is mandated by the parent method name in the
+            // Michelf\MarkdownExtra library and cannot be changed here.
+            // phpcs:ignore PSR2.Methods.MethodDeclaration.Underscore
+            protected function _doFencedCodeBlocks_callback($matches) {
+                if (trim($matches[2]) === '') {
+                    $matches[2] = 'none';
+                }
+
+                return parent::_doFencedCodeBlocks_callback($matches);
+            }
+        };
+        // Render fenced code blocks with the markup that filter_codehighlighter
+        // (Prism.js) recognises: the language class must carry the "language-"
+        // prefix and must sit on the <pre> element followed by a bare <code>, so
+        // that it matches the filter's trigger pattern
+        // /<pre.+?class=".*?language-.*?"><code>/i. With the library defaults
+        // (empty prefix, class on <code>) the filter never activates.
+        $markdown->code_class_prefix = 'language-';
+        $markdown->code_attr_on_pre = true;
+    }
+
+    return $markdown->transform($text);
 }
 
 /**
