@@ -16,11 +16,20 @@
 /**
  * Prism.js initialization.
  *
- * @module     filter/codegihlighter
+ * @module     filter_codehighlighter/prism-init
  * @copyright  2023 Meirza <meirza.arson@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['./prism'], function(PrismJS) {
+define(['./prism', 'core_filters/events'], function(PrismJS, FilterEvents) {
     PrismJS.plugins.customClass.prefix('prism-');
     PrismJS.highlightAll();
+
+    // Listen for dynamically inserted content and highlight code blocks within.
+    document.addEventListener(FilterEvents.eventTypes.filterContentUpdated, function(event) {
+        event.detail.nodes.forEach(function(node) {
+            if (node instanceof HTMLElement) {
+                PrismJS.highlightAllUnder(node);
+            }
+        });
+    });
 });
