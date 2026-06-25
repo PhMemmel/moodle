@@ -177,7 +177,7 @@ class http_client extends Client {
 
         $proxyauth = "";
         if (!empty($CFG->proxyuser) && !empty($CFG->proxypassword)) {
-            $proxyauth = "{$CFG->proxyuser}{$CFG->proxypassword}";
+            $proxyauth = "{$CFG->proxyuser}:{$CFG->proxypassword}";
         }
 
         $protocol = "http://";
@@ -185,6 +185,6 @@ class http_client extends Client {
             $protocol = "socks5://";
         }
 
-        return "{$protocol}{$proxyauth}{$proxyhost}";
+        return "{$protocol}{$proxyauth}@{$proxyhost}";
     }
 }
