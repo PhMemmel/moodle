@@ -251,6 +251,69 @@ final class http_client_test extends \advanced_testcase {
     }
 
     /**
+     * Test proxy settings are transformed into the correct proxy URL.
+     *
+     * @param string $proxyuser proxy user.
+     * @param string $proxypassword proxy password.
+     * @param string $hostwithproxy expected proxy URL (without leading protocol).
+     * @covers \core\http_client
+     * @dataProvider http_client_url_provider
+     */
+    public function test_http_client_url(
+        string $proxyuser,
+        string $proxypassword,
+        string $hostwithproxy
+    ): void {
+        $this->resetAfterTest();
+
+        set_config('proxyhost', 'proxy.example.org');
+        set_config('proxyport', '9876');
+        set_config('proxyuser', $proxyuser);
+        set_config('proxypassword', $proxypassword);
+        set_config('proxytype', 'http');
+        set_config('proxybypass', 'localhost, moodle.test');
+
+        $client = \core\di::get(\core\http_client::class);
+        $config = self::read_object_attribute($client, 'config');
+
+        $this->assertArrayHasKey('proxy', $config);
+        $this->assertSame(
+            [
+                'http' => 'http://' . $hostwithproxy . ':9876',
+                'https' => 'http://' . $hostwithproxy . ':9876',
+                'no' => ['localhost', 'moodle.test'],
+            ],
+            $config['proxy']
+        );
+    }
+
+    /**
+     * Data provider for {@see self::test_http_client_url}.
+     *
+     * @return array[] array of test cases, each containing proxyuser, proxypass and
+     *  the expected part of the resulting URL
+     */
+    public static function http_client_url_provider(): array {
+        return [
+            'with_authentication' => [
+                'proxyuser' => 'testuser',
+                'proxypassword' => 'testpass',
+                'hostwithproxy' => 'testuser:testpass@proxy.example.org',
+            ],
+            'without_authentication' => [
+                'proxyuser' => '',
+                'proxypassword' => '',
+                'hostwithproxy' => 'proxy.example.org',
+            ],
+            'with_authentication_empty_password' => [
+                'proxyuser' => 'testuser',
+                'proxypassword' => '',
+                'hostwithproxy' => 'testuser:@proxy.example.org',
+            ],
+        ];
+    }
+
+    /**
      * Test moodle redirect can be set with guzzle.
      *
      * @covers \core\http_client
