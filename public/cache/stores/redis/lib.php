@@ -323,21 +323,27 @@ class cachestore_redis extends store implements
                 }
             } else {
                 $redis = new Redis();
+                $persistent = (bool) ($configuration['persistent'] ?? false);
+                $persistentid = !empty($configuration['persistentid']) ? $configuration['persistentid'] : null;
+                // Persistent connections are established with pconnect(), which otherwise shares the signature of
+                // connect(). The persistent connection ID is ignored by connect().
+                $connectmethod = $persistent ? 'pconnect' : 'connect';
                 if (version_compare($phpredisversion, '6.0.0', '>=')) {
                     // Named parameters are fully supported starting from version 6.0.0.
-                    $redis->connect(
+                    $redis->$connectmethod(
                         host: $server,
                         port: $port,
                         timeout: $this->connectiontimeout, // Timeout.
+                        persistent_id: $persistentid,
                         retry_interval: 100, // Retry interval.
                         read_timeout: $this->readtimeout, // Read timeout.
                         context: $opts,
                     );
                 } else {
-                    $redis->connect(
+                    $redis->$connectmethod(
                         $server, $port,
                         $this->connectiontimeout,
-                        null,
+                        $persistentid,
                         100,
                         $this->readtimeout,
                         $opts,
@@ -915,7 +921,7 @@ class cachestore_redis extends store implements
      * @return array
      */
     public static function config_get_configuration_array($data) {
-        return array(
+        $configuration = [
             'server' => $data->server,
             'prefix' => $data->prefix,
             'password' => $data->password,
@@ -926,7 +932,16 @@ class cachestore_redis extends store implements
             'encryption' => $data->encryption,
             'cafile' => $data->cafile,
             'clustermode' => $data->clustermode,
-        );
+        ];
+
+        // Cluster connections are always persistent, so the persistent connection settings do not apply to them and
+        // are hidden in the form. Do not store the values which the browser submitted for the hidden fields.
+        if (empty($data->clustermode)) {
+            $configuration['persistent'] = $data->persistent;
+            $configuration['persistentid'] = $data->persistentid;
+        }
+
+        return $configuration;
     }
 
     /**
@@ -961,6 +976,12 @@ class cachestore_redis extends store implements
         }
         if (!empty($config['clustermode'])) {
             $data['clustermode'] = $config['clustermode'];
+        }
+        if (!empty($config['persistent'])) {
+            $data['persistent'] = $config['persistent'];
+        }
+        if (!empty($config['persistentid'])) {
+            $data['persistentid'] = $config['persistentid'];
         }
         $editform->set_data($data);
     }

@@ -17,6 +17,7 @@
 namespace cachestore_redis;
 
 use cachestore_redis;
+use cachestore_redis\tests\testable_cachestore_redis;
 use core_cache\definition;
 use core_cache\store;
 
@@ -40,6 +41,9 @@ require_once(__DIR__.'/../lib.php');
  * @coversDefaultClass \cachestore_redis
  */
 final class cachestore_redis_test extends \cachestore_tests {
+    /** @var string The persistent connection ID used when testing persistent connections. */
+    private const PERSISTENT_ID = 'phpunit_cachestore_persistent';
+
     /** @var cachestore_redis $store Redis Cache Store. */
     protected $store;
 
@@ -143,6 +147,24 @@ final class cachestore_redis_test extends \cachestore_tests {
     }
 
     /**
+     * Creates a testable cachestore which exposes the connection it has established.
+     *
+     * @param array $extraconfiguration Configuration to add to the default unit test configuration.
+     * @return testable_cachestore_redis
+     */
+    protected function create_testable_cachestore_redis(array $extraconfiguration = []): testable_cachestore_redis {
+        $definition = definition::load_adhoc(store::MODE_APPLICATION, 'cachestore_redis', 'phpunit_test');
+        $store = new testable_cachestore_redis(
+            'Test',
+            array_merge(cachestore_redis::unit_test_configuration(), $extraconfiguration),
+        );
+        $store->initialise($definition);
+        $this->store = $store;
+        $store->purge();
+        return $store;
+    }
+
+    /**
      * Test method to check if the cachestore_redis instance is ready after connecting.
      *
      * @covers ::is_ready
@@ -150,5 +172,40 @@ final class cachestore_redis_test extends \cachestore_tests {
     public function test_it_is_ready_after_connecting(): void {
         $store = $this->create_cachestore_redis();
         $this::assertTrue($store->is_ready());
+    }
+
+    /**
+     * Test that a persistent connection is established when the store is configured to use one.
+     *
+     * Note: A persistent connection can only be told apart from a regular one when a persistent connection ID has been
+     * set, as phpredis reports no persistent ID for connections established without one.
+     *
+     * @covers ::new_redis
+     */
+    public function test_persistent_connection_is_established(): void {
+        $store = $this->create_testable_cachestore_redis([
+            'persistent' => true,
+            'persistentid' => self::PERSISTENT_ID,
+        ]);
+
+        $this->assertTrue($store->is_ready());
+        $this->assertSame(self::PERSISTENT_ID, $store->get_redis()->getPersistentID());
+
+        // The connection must remain fully functional, which would not be the case if the connection parameters were
+        // passed to pconnect() in the wrong order.
+        $store->set('persistentkey', 'persistentvalue');
+        $this->assertSame('persistentvalue', $store->get('persistentkey'));
+    }
+
+    /**
+     * Test that a regular, non persistent connection is established unless configured otherwise.
+     *
+     * @covers ::new_redis
+     */
+    public function test_connection_is_not_persistent_by_default(): void {
+        $store = $this->create_testable_cachestore_redis();
+
+        $this->assertTrue($store->is_ready());
+        $this->assertNull($store->get_redis()->getPersistentID());
     }
 }

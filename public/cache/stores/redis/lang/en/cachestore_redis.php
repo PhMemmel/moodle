@@ -38,6 +38,17 @@ $string['encrypt_connection'] = 'Use Transport Layer Security (TLS) encryption';
 $string['encrypt_connection_help'] = 'Use Transport Layer Security (TLS) to connect to Redis. Do not use \'tls://\' in the hostname for Redis; use this option instead.';
 $string['password'] = 'Password';
 $string['password_help'] = 'This sets the password of the Redis server.';
+$string['persistent'] = 'Use persistent connection';
+$string['persistent_help'] = 'Persistent connections may improve performance in heavy traffic environments. This setting has no effect in cluster mode, where connections are always persistent.
+
+The behaviour depends on the phpredis setting redis.pconnect.pooling_enabled in php.ini, which Moodle can not influence:
+
+* redis.pconnect.pooling_enabled = 1 (the phpredis default): Connections are pooled by host and port only and the persistent connection ID is ignored. A connection released at the end of a request may be taken over by any other Redis client of the same PHP worker which connects persistently to the same host and port, and it inherits the database that was selected on it. This cache store never selects a database and therefore assumes database 0, so make sure that no other Redis client of this site selects a different database on the same host and port. In particular, do not combine this with the $CFG->session_redis_database setting of the Redis session handler.
+* redis.pconnect.pooling_enabled = 0: Connections are kept per host, port and persistent connection ID. Set a persistent connection ID which is used by this cache store only.';
+$string['persistentid'] = 'Persistent connection ID';
+$string['persistentid_help'] = 'A connection ID separating otherwise identical connections from each other, for example when different Redis databases are being accessed.
+
+This is only taken into account when connection pooling has been disabled with redis.pconnect.pooling_enabled = 0 in php.ini. With the phpredis default of redis.pconnect.pooling_enabled = 1 the ID is ignored and provides no isolation.';
 $string['pluginname'] = 'Redis';
 $string['prefix'] = 'Key prefix';
 $string['prefix_help'] = 'This prefix is used for all key names on the Redis server.
