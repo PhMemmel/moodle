@@ -75,5 +75,17 @@ class cachestore_redis_addinstance_form extends cachestore_addinstance_form {
         $form->addHelpButton('readtimeout', 'readtimeout', 'cachestore_redis');
         $form->setDefault('readtimeout', cachestore_redis::CONNECTION_TIMEOUT);
         $form->setType('readtimeout', PARAM_FLOAT);
+
+        $form->addElement('advcheckbox', 'persistent', get_string('persistent', 'cachestore_redis'));
+        $form->setType('persistent', PARAM_BOOL);
+        $form->setDefault('persistent', 0);
+        $form->addHelpButton('persistent', 'persistent', 'cachestore_redis');
+        $form->hideIf('persistent', 'clustermode', 'checked');
+
+        $form->addElement('text', 'persistentid', get_string('persistentid', 'cachestore_redis'));
+        $form->setType('persistentid', PARAM_TEXT);
+        $form->addHelpButton('persistentid', 'persistentid', 'cachestore_redis');
+        $form->hideIf('persistentid', 'persistent', 'notchecked');
+        $form->hideIf('persistentid', 'clustermode', 'checked');
     }
 }
