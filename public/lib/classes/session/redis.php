@@ -120,6 +120,12 @@ class redis extends handler implements SessionHandlerInterface {
     /** @var float $readtimeout The number of seconds to wait for a read from the Redis server. */
     protected float $readtimeout = 3.0;
 
+    /** @var bool $persistent Whether to use a persistent connection to the Redis server. */
+    protected bool $persistent = false;
+
+    /** @var string|null $persistentid The persistent connection ID, or null to use the default one. */
+    protected ?string $persistentid = null;
+
     /**
      * Create new instance of handler.
      */
@@ -217,6 +223,14 @@ class redis extends handler implements SessionHandlerInterface {
 
         if (isset($CFG->session_redis_read_timeout)) {
             $this->readtimeout = (float)$CFG->session_redis_read_timeout;
+        }
+
+        if (isset($CFG->session_redis_persistent)) {
+            $this->persistent = (bool) $CFG->session_redis_persistent;
+        }
+
+        if (isset($CFG->session_redis_persistent_id)) {
+            $this->persistentid = (string) $CFG->session_redis_persistent_id;
         }
 
         $this->clock = di::get(clock::class);
@@ -342,22 +356,26 @@ class redis extends handler implements SessionHandlerInterface {
                 } else {
                     $delay = rand(100, 500);
                     $this->connection = new \Redis();
+                    // Persistent connections are established with pconnect(), which otherwise shares the signature of
+                    // connect(). The persistent connection ID is ignored by connect().
+                    $connectmethod = $this->persistent ? 'pconnect' : 'connect';
                     if (version_compare($phpredisversion, '6.0.0', '>=')) {
                         // Named parameters are fully supported starting from version 6.0.0.
-                        $this->connection->connect(
+                        $this->connection->$connectmethod(
                             host: $server,
                             port: $port,
                             timeout: $this->connectiontimeout, // Timeout.
+                            persistent_id: $this->persistentid,
                             retry_interval: $delay,
                             read_timeout: $this->readtimeout, // Read timeout.
                             context: $opts,
                         );
                     } else {
-                        $this->connection->connect(
+                        $this->connection->$connectmethod(
                             $server,
                             $port,
                             $this->connectiontimeout,
-                            null,
+                            $this->persistentid,
                             $delay,
                             $this->readtimeout,
                             $opts

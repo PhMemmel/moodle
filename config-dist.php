@@ -384,6 +384,33 @@ $CFG->admin = 'admin';
 //      $CFG->session_redis_maxretries = 3;                  // Optional, default is 3.
 //      $CFG->session_redis_read_timeout = 3.0;              // Optional, default is 3.0.
 //
+//      Persistent connections may improve performance in heavy traffic environments. They only apply to a single
+//      (non-cluster) Redis server. Cluster connections are always persistent, regardless of these two settings.
+//      $CFG->session_redis_persistent = false;              // Optional, default is false.
+//      $CFG->session_redis_persistent_id = '';              // Optional, default is don't set one.
+//
+//      Before enabling persistent connections, check the phpredis php.ini setting redis.pconnect.pooling_enabled
+//      (for example with "php -i | grep pooling_enabled") and follow the matching case below. It decides how
+//      connections are shared between the Redis clients of a single PHP worker process, and Moodle can not
+//      influence it. Relevant here: the session handler is the only Moodle Redis client which issues a SELECT
+//      (when session_redis_database is not 0), while cachestore_redis never issues one and assumes database 0.
+//
+//      Case A: redis.pconnect.pooling_enabled = 1 (the phpredis default)
+//        * Connections are pooled by host and port only, the persistent connection ID is IGNORED.
+//        * A connection released at the end of a request may be picked up by any other Redis client of the same
+//          PHP worker which connects to the same host and port persistently, and it inherits the database that
+//          was selected on it.
+//        * Setting session_redis_persistent_id has no effect here, do not rely on it for isolation.
+//        * Therefore either keep $CFG->session_redis_database = 0, or make sure that no other Moodle Redis
+//          client (in particular cachestore_redis) uses persistent connections to the same host and port.
+//          Ignoring this makes the cache store silently read and write in the session database.
+//
+//      Case B: redis.pconnect.pooling_enabled = 0
+//        * Connections are kept per host, port and persistent connection ID.
+//        * Set $CFG->session_redis_persistent_id to a value which is used by this session handler only, so that
+//          no other Redis client of the same PHP worker can take over its connections.
+//        * $CFG->session_redis_database can then be used safely.
+//
 //      Use the igbinary serializer instead of the php default one. Note that phpredis must be compiled with
 //      igbinary support to make the setting to work. Also, if you change the serializer you have to flush the database!
 //      $CFG->session_redis_serializer_use_igbinary = false; // Optional, default is PHP builtin serializer.

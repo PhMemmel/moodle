@@ -17,6 +17,7 @@
 namespace core\session;
 
 use core\tests\session\mock_handler;
+use core\tests\session\testable_redis;
 use Redis;
 use RedisException;
 
@@ -38,6 +39,8 @@ use RedisException;
  * @covers \core\session\redis
  */
 final class redis_test extends \advanced_testcase {
+    /** @var string The persistent connection ID used when testing persistent connections. */
+    private const PERSISTENT_ID = 'phpunit_session_persistent';
     /** @var string $keyprefix This key prefix used when testing Redis */
     protected string $keyprefix = '';
     /** @var ?Redis $redis The current testing redis connection */
@@ -586,5 +589,97 @@ final class redis_test extends \advanced_testcase {
 
         // Check the session with db auth plugin was not destroyed.
         $this->assertTrue($session->session_exists('id2'));
+    }
+
+    /**
+     * Data provider for {@see test_persistent_settings_are_read_from_config()}.
+     *
+     * @return array[] The configuration to set and the values expected on the handler.
+     */
+    public static function persistent_settings_are_read_from_config_provider(): array {
+        return [
+            'not_configured' => [
+                'config' => [],
+                'expectedpersistent' => false,
+                'expectedpersistentid' => null,
+            ],
+            'enabled_without_id' => [
+                'config' => ['session_redis_persistent' => true],
+                'expectedpersistent' => true,
+                'expectedpersistentid' => null,
+            ],
+            'enabled_with_id' => [
+                'config' => ['session_redis_persistent' => true, 'session_redis_persistent_id' => 'someid'],
+                'expectedpersistent' => true,
+                'expectedpersistentid' => 'someid',
+            ],
+            'explicitly_disabled' => [
+                'config' => ['session_redis_persistent' => false, 'session_redis_persistent_id' => 'someid'],
+                'expectedpersistent' => false,
+                'expectedpersistentid' => 'someid',
+            ],
+        ];
+    }
+
+    /**
+     * Test that the persistent connection settings are read from the Moodle configuration.
+     *
+     * @param array $config The $CFG values to set.
+     * @param bool $expectedpersistent Whether the handler is expected to use a persistent connection.
+     * @param string|null $expectedpersistentid The persistent connection ID expected on the handler.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('persistent_settings_are_read_from_config_provider')]
+    public function test_persistent_settings_are_read_from_config(
+        array $config,
+        bool $expectedpersistent,
+        ?string $expectedpersistentid,
+    ): void {
+        global $CFG;
+
+        foreach ($config as $name => $value) {
+            $CFG->{$name} = $value;
+        }
+
+        $sess = new testable_redis();
+
+        $this->assertSame($expectedpersistent, $sess->is_persistent());
+        $this->assertSame($expectedpersistentid, $sess->get_persistentid());
+    }
+
+    /**
+     * Test that a persistent connection is established when the handler is configured to use one.
+     *
+     * Note: A persistent connection can only be told apart from a regular one when a persistent connection ID has been
+     * set, as phpredis reports no persistent ID for connections established without one.
+     */
+    public function test_persistent_connection_is_established(): void {
+        global $CFG;
+
+        $CFG->session_redis_persistent = true;
+        $CFG->session_redis_persistent_id = self::PERSISTENT_ID;
+
+        $sess = new testable_redis();
+        $sess->init();
+
+        $this->assertSame(self::PERSISTENT_ID, $sess->get_connection()->getPersistentID());
+
+        // The session must remain fully usable, which would not be the case if the connection parameters were passed
+        // to pconnect() in the wrong order.
+        $sess->set_requires_write_lock(true);
+        $this->assertTrue($sess->open('Not used', 'Not used'));
+        $this->assertSame('', $sess->read('sess1'));
+        $this->assertTrue($sess->write('sess1', 'DATA'));
+        $this->assertTrue($sess->close());
+        $this->assert_session_no_locks();
+    }
+
+    /**
+     * Test that a regular, non persistent connection is established unless configured otherwise.
+     */
+    public function test_connection_is_not_persistent_by_default(): void {
+        $sess = new testable_redis();
+        $sess->init();
+
+        $this->assertNull($sess->get_connection()->getPersistentID());
     }
 }
