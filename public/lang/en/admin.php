@@ -1275,6 +1275,7 @@ $string['questiontypes'] = 'Question types';
 $string['quizattemptsupgradedmessage'] = 'In Moodle 2.1 there was a major upgrade to questions. It was possible to delay parts of the database upgrade to be run later. Before upgrading to Moodle 2.7, this upgrade must be completed.';
 $string['recaptchaprivatekey'] = 'ReCAPTCHA secret key';
 $string['recaptchapublickey'] = 'ReCAPTCHA site key';
+$string['redissessionserverversion'] = 'The Redis server used for storing sessions is running version {$a->current}, but at least version {$a->minimum} is required.';
 $string['register'] = 'Register your site';
 $string['registration'] = 'Registration';
 $string['registrationwarning'] = 'Your site isn\'t registered, so you won\'t receive security alerts or important updates from Moodle.';

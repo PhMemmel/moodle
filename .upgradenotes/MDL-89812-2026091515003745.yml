@@ -1,0 +1,10 @@
+issueNumber: MDL-89812
+notes:
+  core:
+    - message: >-
+        The Redis session handler no longer sends an INFO command to the server
+        on each connection to verify the server version. The version
+        requirement is now verified by a new environment check instead. If the
+        connection is encrypted, a PING command is sent right after connecting
+        to work around a phpredis issue with TLS connections.
+      type: improved

@@ -369,6 +369,13 @@ class redis extends handler implements SessionHandlerInterface {
                     }
                 }
 
+                // In case of a TLS connection, the connection hangs if the phpredis client does not communicate with the
+                // server immediately after connecting. See https://github.com/phpredis/phpredis/issues/2332.
+                // A lightweight PING satisfies that requirement.
+                if ($encrypt && !$this->ping_server()) {
+                    throw new $exceptionclass('Ping failed.');
+                }
+
                 if (!$this->connection->setOption(\Redis::OPT_SERIALIZER, $this->serializer)) {
                     throw new $exceptionclass('Unable to set the Redis PHP Serializer option.');
                 }
@@ -377,26 +384,6 @@ class redis extends handler implements SessionHandlerInterface {
                     if (!$this->connection->setOption(\Redis::OPT_PREFIX, $this->prefix)) {
                         throw new $exceptionclass('Unable to set the Redis Prefix option.');
                     }
-                }
-
-                // Check the server version.
-                // The session handler requires a version of Redis server with support for SET command options (at least 2.6.12).
-                // Note: In the case of a TLS connection, the connection will hang if the phpredis client does not communicate
-                // with the server immediately after connect(). See https://github.com/phpredis/phpredis/issues/2332.
-                // This version check satisfies that requirement.
-                try {
-                    $serverversion = $this->connection->info('server')['redis_version'];
-                } catch (RedisException | RedisClusterException $e) {
-                    // Some proxies e.g envoy or twemproxy lack support of INFO command. So just assume we meet the minimum
-                    // version requirement.
-                    $serverversion = self::REDIS_MIN_SERVER_VERSION;
-                }
-                if (version_compare($serverversion, self::REDIS_MIN_SERVER_VERSION) < 0) {
-                    throw new $exceptionclass(sprintf(
-                        "Version %s is not supported. The minimum version required is %s.",
-                        $serverversion,
-                        self::REDIS_MIN_SERVER_VERSION,
-                    ));
                 }
 
                 if ($this->database !== 0) {
@@ -423,6 +410,87 @@ class redis extends handler implements SessionHandlerInterface {
         }
 
         return false;
+    }
+
+    /**
+     * Send a PING command to the Redis server.
+     *
+     * @return bool True, if the server responded to the ping.
+     */
+    protected function ping_server(): bool {
+        if ($this->clustermode) {
+            // The PING command has no key phpredis could determine the target node from, so it expects an additional
+            // argument which is hashed like a key to select the node. A random string is used here, because a constant
+            // one would send the ping of every single connection to the very same node of the cluster.
+            return (bool) $this->connection->ping(random_string());
+        }
+
+        return (bool) $this->connection->ping();
+    }
+
+    /**
+     * Get the version of the Redis server the handler is connected to.
+     *
+     * Note: This sends an INFO command to the server, so it must not be called during the normal session handling.
+     * It is meant to be used by the environment checks only, see {@see self::check_server_version()}.
+     *
+     * @return string The version of the Redis server.
+     */
+    public function get_server_version(): string {
+        try {
+            if ($this->clustermode) {
+                // The INFO command has no key phpredis could determine the target node from, so it expects an
+                // additional first argument which is hashed like a key to select the node. As this check is only
+                // performed by the environment checks, a constant value like 'serverversion' is good enough here.
+                $info = $this->connection->info('serverversion', 'server');
+            } else {
+                $info = $this->connection->info('server');
+            }
+            return $info['redis_version'];
+        } catch (RedisException | RedisClusterException $e) {
+            // Some proxies e.g envoy or twemproxy lack support of INFO command. So just assume we meet the minimum
+            // version requirement.
+            return self::REDIS_MIN_SERVER_VERSION;
+        }
+    }
+
+    /**
+     * Environment check ensuring that the Redis server used for sessions meets the minimum version requirement.
+     *
+     * This check replaces the version check which was previously performed on every connection of the session handler,
+     * which required an additional roundtrip to the server.
+     *
+     * @param \environment_results $result The environment results object to update.
+     * @return \environment_results|null The updated result if the requirement is not met, null otherwise.
+     */
+    public static function check_server_version(\environment_results $result): ?\environment_results {
+        global $CFG;
+
+        if (empty($CFG->session_handler_class) || ltrim($CFG->session_handler_class, '\\') !== self::class) {
+            // The Redis session handler is not in use, so there is nothing to check.
+            return null;
+        }
+
+        $handler = new self();
+        try {
+            $handler->connect_to_redis();
+            $serverversion = $handler->get_server_version();
+        } catch (\Throwable $e) {
+            // The server cannot be reached, which is reported by the session handler itself.
+            return null;
+        }
+
+        if (version_compare($serverversion, self::REDIS_MIN_SERVER_VERSION, '<')) {
+            $result->setInfo('Redis session server version');
+            $result->setStatus(false);
+            $result->setFeedbackStr(['redissessionserverversion', 'admin', (object) [
+                'current' => $serverversion,
+                'minimum' => self::REDIS_MIN_SERVER_VERSION,
+            ]]);
+            return $result;
+        }
+
+        return null;
     }
 
     /**
