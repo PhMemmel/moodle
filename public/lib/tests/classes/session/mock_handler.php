@@ -30,10 +30,29 @@ use core\session\database;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class mock_handler extends database {
+    /** @var string The info which is set by the environment check. */
+    const ENVIRONMENT_CHECK_INFO = 'Mock session handler check';
+
     #[\Override]
     public function init(): bool {
         // Nothing special to do in the mock.
         return true;
+    }
+
+    /**
+     * Environment check of this session handler.
+     *
+     * It allows to test that the environment check of the session handler in use is executed.
+     *
+     * @param \environment_results $result The environment results object to update.
+     * @return \environment_results The updated result.
+     */
+    #[\Override]
+    public function check_environment(\environment_results $result): \environment_results {
+        $result->setInfo(self::ENVIRONMENT_CHECK_INFO);
+        $result->setStatus(true);
+
+        return $result;
     }
 
     #[\Override]

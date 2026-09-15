@@ -109,4 +109,20 @@ final class environment_test extends \advanced_testcase {
         $result = environment_tester::check_composer_dependencies_installed($result);
         $this->assertNull($result);
     }
+
+    /**
+     * Test that the environment check defined by the session handler in use is executed.
+     */
+    public function test_check_session_handler(): void {
+        global $CFG;
+
+        require_once($CFG->libdir . '/environmentlib.php');
+
+        // During unit tests the session handler in use always is the mock handler, see manager::get_handler_class().
+        $result = environment::check_session_handler(new \environment_results('custom_check'));
+
+        $this->assertInstanceOf(\environment_results::class, $result);
+        $this->assertTrue($result->getStatus());
+        $this->assertSame(\core\tests\session\mock_handler::ENVIRONMENT_CHECK_INFO, $result->getInfo());
+    }
 }

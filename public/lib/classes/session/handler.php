@@ -74,6 +74,22 @@ abstract class handler {
     }
 
     /**
+     * Check whether the environment meets the requirements of this session handler.
+     *
+     * Session handlers may override this method to report any unmet requirement, for example the version of the
+     * server the sessions are stored on.
+     *
+     * Note: The check is registered as a required check in admin/environment.xml, so returning a result with a
+     * failed status will prevent the installation and the upgrade of the site.
+     *
+     * @param \environment_results $result The environment results object to update.
+     * @return ?\environment_results The updated result, or null if there is nothing to report.
+     */
+    public function check_environment(\environment_results $result): ?\environment_results {
+        return null;
+    }
+
+    /**
      * Returns all session records.
      *
      * @return \Iterator

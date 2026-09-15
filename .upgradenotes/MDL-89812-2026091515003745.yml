@@ -1,0 +1,17 @@
+issueNumber: MDL-89812
+notes:
+  core:
+    - message: >-
+        The Redis session handler no longer sends an INFO command to the server
+        on each connection to verify the server version. The version
+        requirement is now verified by a new environment check instead. If the
+        connection is encrypted, a PING command is sent right after connecting
+        to work around a phpredis issue with TLS connections.
+      type: improved
+    - message: >-
+        Session handlers can define their own environment check by overriding the
+        new `\core\session\handler::check_environment` method, which returns the
+        `\environment_results` object, or null if there is nothing to report. The
+        check of the session handler in use is executed by the new environment
+        check `\core\environment::check_session_handler`.
+      type: improved

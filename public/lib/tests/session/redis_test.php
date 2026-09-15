@@ -385,6 +385,29 @@ final class redis_test extends \advanced_testcase {
     }
 
     /**
+     * Test the environment check reporting the version of the Redis server used for sessions.
+     */
+    public function test_check_environment(): void {
+        global $CFG;
+
+        require_once($CFG->libdir . '/environmentlib.php');
+
+        $sess = new \core\session\redis();
+        $result = $sess->check_environment(new \environment_results('custom_check'));
+
+        $this->assertInstanceOf(\environment_results::class, $result);
+        $this->assertTrue($result->getStatus());
+        $this->assertSame(\core\session\redis::REDIS_MIN_SERVER_VERSION, $result->getNeededVersion());
+        $this->assertTrue(
+            version_compare(
+                $result->getCurrentVersion(),
+                \core\session\redis::REDIS_MIN_SERVER_VERSION,
+                '>='
+            ),
+        );
+    }
+
+    /**
      * Test the get maxlifetime method.
      */
     public function test_get_maxlifetime(): void {

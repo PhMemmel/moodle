@@ -210,4 +210,23 @@ class environment {
 
         return null;
     }
+
+    /**
+     * Run the environment check of the session handler in use.
+     *
+     * Session handlers may report any unmet requirement by overriding
+     * {@see \core\session\handler::check_environment()}.
+     *
+     * Note: This check is registered as a required check, so a session handler reporting
+     * a failure here will prevent the installation and the upgrade of the site.
+     *
+     * @param \environment_results $result
+     * @return ?\environment_results
+     */
+    public static function check_session_handler(\environment_results $result): ?\environment_results {
+        $handlerclass = \core\session\manager::get_handler_class();
+        $handler = new $handlerclass();
+
+        return $handler->check_environment($result);
+    }
 }
