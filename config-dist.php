@@ -382,6 +382,11 @@ $CFG->admin = 'admin';
 //                                                           // After 5 seconds it will throttle down to once per second.
 //      $CFG->session_redis_connection_timeout = 3;          // Optional, default is 3.
 //      $CFG->session_redis_maxretries = 3;                  // Optional, default is 3.
+//      $CFG->session_redis_version = '7.2.0';               // Optional, the version of the Redis server in use.
+//                                                           // If set, no INFO command is sent to the server to determine
+//                                                           // its version, which saves a roundtrip on every connection.
+//                                                           // Ignored when session_redis_encrypt is used, as the INFO
+//                                                           // command is required right after connecting via TLS.
 //
 //      Use the igbinary serializer instead of the php default one. Note that phpredis must be compiled with
 //      igbinary support to make the setting to work. Also, if you change the serializer you have to flush the database!
