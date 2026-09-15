@@ -120,6 +120,9 @@ class redis extends handler implements SessionHandlerInterface {
     /** @var float $readtimeout The number of seconds to wait for a read from the Redis server. */
     protected float $readtimeout = 3.0;
 
+    /** @var string|null $serverversion The configured Redis server version, if any. Avoids querying the server. */
+    protected ?string $serverversion = null;
+
     /**
      * Create new instance of handler.
      */
@@ -217,6 +220,10 @@ class redis extends handler implements SessionHandlerInterface {
 
         if (isset($CFG->session_redis_read_timeout)) {
             $this->readtimeout = (float)$CFG->session_redis_read_timeout;
+        }
+
+        if (!empty($CFG->session_redis_version)) {
+            $this->serverversion = (string)$CFG->session_redis_version;
         }
 
         $this->clock = di::get(clock::class);
@@ -379,18 +386,7 @@ class redis extends handler implements SessionHandlerInterface {
                     }
                 }
 
-                // Check the server version.
-                // The session handler requires a version of Redis server with support for SET command options (at least 2.6.12).
-                // Note: In the case of a TLS connection, the connection will hang if the phpredis client does not communicate
-                // with the server immediately after connect(). See https://github.com/phpredis/phpredis/issues/2332.
-                // This version check satisfies that requirement.
-                try {
-                    $serverversion = $this->connection->info('server')['redis_version'];
-                } catch (RedisException | RedisClusterException $e) {
-                    // Some proxies e.g envoy or twemproxy lack support of INFO command. So just assume we meet the minimum
-                    // version requirement.
-                    $serverversion = self::REDIS_MIN_SERVER_VERSION;
-                }
+                $serverversion = $this->get_server_version($encrypt);
                 if (version_compare($serverversion, self::REDIS_MIN_SERVER_VERSION) < 0) {
                     throw new $exceptionclass(sprintf(
                         "Version %s is not supported. The minimum version required is %s.",
@@ -423,6 +419,35 @@ class redis extends handler implements SessionHandlerInterface {
         }
 
         return false;
+    }
+
+    /**
+     * Get the version of the Redis server the handler is connected to.
+     *
+     * The session handler requires a version of Redis server with support for SET command options (at least 2.6.12).
+     *
+     * If the version is configured via $CFG->session_redis_version, it is used as is and no INFO command is sent to the
+     * server. This avoids an additional roundtrip on every connection.
+     *
+     * Note: In the case of a TLS connection, the connection will hang if the phpredis client does not communicate with the
+     * server immediately after connect(). See https://github.com/phpredis/phpredis/issues/2332.
+     * Therefore, the INFO command is always sent when TLS is used, regardless of the configured version.
+     *
+     * @param bool $encrypt Whether the connection to the Redis server is encrypted using TLS.
+     * @return string The version of the Redis server.
+     */
+    protected function get_server_version(bool $encrypt): string {
+        if ($this->serverversion !== null && !$encrypt) {
+            return $this->serverversion;
+        }
+
+        try {
+            return $this->connection->info('server')['redis_version'];
+        } catch (RedisException | RedisClusterException $e) {
+            // Some proxies e.g envoy or twemproxy lack support of INFO command. So just assume we meet the minimum
+            // version requirement.
+            return self::REDIS_MIN_SERVER_VERSION;
+        }
     }
 
     /**
