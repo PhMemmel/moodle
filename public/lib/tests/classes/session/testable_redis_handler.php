@@ -38,8 +38,17 @@ class testable_redis_handler extends redis {
         $this->connection = $connection;
     }
 
+    /**
+     * Get the list of hosts the handler will connect to.
+     *
+     * @return array The list of hosts.
+     */
+    public function get_hosts(): array {
+        return $this->host;
+    }
+
     #[\Override]
-    public function get_server_version(bool $encrypt): string {
-        return parent::get_server_version($encrypt);
+    public function get_server_version(bool $encrypt, array $servers = []): string {
+        return parent::get_server_version($encrypt, $servers);
     }
 }

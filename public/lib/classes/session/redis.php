@@ -134,6 +134,11 @@ class redis extends handler implements SessionHandlerInterface {
             // If there are multiple hosts (separated by a comma), use the Redis cluster connection.
             $this->host = array_filter(array_map('trim', explode(',', $CFG->session_redis_host)));
             $this->clustermode = count($this->host) > 1;
+            if ($this->clustermode) {
+                // Randomise the order of the nodes, so that the requests which are sent to a specific node,
+                // for example the ones determining the slot distribution, are spread across the whole cluster.
+                shuffle($this->host);
+            }
         }
 
         if (isset($CFG->session_redis_port)) {
@@ -386,7 +391,7 @@ class redis extends handler implements SessionHandlerInterface {
                     }
                 }
 
-                $serverversion = $this->get_server_version($encrypt);
+                $serverversion = $this->get_server_version($encrypt, $trimmedservers);
                 if (version_compare($serverversion, self::REDIS_MIN_SERVER_VERSION) < 0) {
                     throw new $exceptionclass(sprintf(
                         "Version %s is not supported. The minimum version required is %s.",
@@ -434,14 +439,21 @@ class redis extends handler implements SessionHandlerInterface {
      * Therefore, the INFO command is always sent when TLS is used, regardless of the configured version.
      *
      * @param bool $encrypt Whether the connection to the Redis server is encrypted using TLS.
+     * @param array $servers The list of servers, only used in cluster mode to determine the node to query.
      * @return string The version of the Redis server.
      */
-    protected function get_server_version(bool $encrypt): string {
+    protected function get_server_version(bool $encrypt, array $servers = []): string {
         if ($this->serverversion !== null && !$encrypt) {
             return $this->serverversion;
         }
 
         try {
+            if ($this->clustermode) {
+                // In cluster mode the INFO command has to be targeted at a specific node. As the list of nodes is
+                // randomised while reading the configuration, the first one is used to spread the load across the cluster.
+                $servers = empty($servers) ? $this->host : $servers;
+                return $this->connection->info(reset($servers), 'server')['redis_version'];
+            }
             return $this->connection->info('server')['redis_version'];
         } catch (RedisException | RedisClusterException $e) {
             // Some proxies e.g envoy or twemproxy lack support of INFO command. So just assume we meet the minimum
