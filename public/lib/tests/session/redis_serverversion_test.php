@@ -86,7 +86,7 @@ final class redis_serverversion_test extends \advanced_testcase {
             $connection->expects($this->never())->method('info');
         }
 
-        $handler = new testable_redis_handler();
+        $handler = \core\di::get(testable_redis_handler::class);
         $handler->set_connection($connection);
 
         $this->assertSame($expected, $handler->call_get_server_version($encrypt));
@@ -128,5 +128,41 @@ final class redis_serverversion_test extends \advanced_testcase {
                 'expected' => redis::REDIS_MIN_SERVER_VERSION,
             ],
         ];
+    }
+
+    /**
+     * Test that in cluster mode the INFO command is not always routed to the same node.
+     *
+     * The INFO command has no key phpredis could determine the target node from, so it expects an additional first
+     * argument which is hashed like a key to select the node. Passing a constant value there would send the version
+     * check of every single connection to the very same node of the cluster.
+     */
+    public function test_get_server_version_cluster(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        // Multiple hosts enable the cluster mode of the handler.
+        $CFG->session_redis_host = implode(',', ['127.0.0.1:7000', '127.0.0.1:7001', '127.0.0.1:7002']);
+
+        // Collect the values phpredis would hash to determine the node the INFO command is sent to.
+        $hashedvalues = [];
+        $connection = $this->createMock(\RedisCluster::class);
+        $connection->method('info')
+            ->willReturnCallback(function (string $hashedvalue, string ...$sections) use (&$hashedvalues): array {
+                $this->assertSame(['server'], $sections, 'The INFO command has to request the server section.');
+                $hashedvalues[$hashedvalue] = true;
+                return ['redis_version' => self::REPORTED_VERSION];
+            });
+
+        $handler = \core\di::get(testable_redis_handler::class);
+        $handler->set_connection($connection);
+
+        $runs = 5;
+        for ($run = 0; $run < $runs; $run++) {
+            $this->assertSame(self::REPORTED_VERSION, $handler->call_get_server_version(false));
+        }
+
+        $this->assertCount($runs, $hashedvalues, 'The INFO command is always routed to the same node.');
     }
 }

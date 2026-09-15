@@ -442,6 +442,12 @@ class redis extends handler implements SessionHandlerInterface {
         }
 
         try {
+            if ($this->clustermode) {
+                // The INFO command has no key phpredis could determine the target node from, so it expects an
+                // additional first argument which is hashed like a key to select the node. A random string is used
+                // here, because a constant one would send this check to the very same node on every connection.
+                return $this->connection->info(random_string(), 'server')['redis_version'];
+            }
             return $this->connection->info('server')['redis_version'];
         } catch (RedisException | RedisClusterException $e) {
             // Some proxies e.g envoy or twemproxy lack support of INFO command. So just assume we meet the minimum
