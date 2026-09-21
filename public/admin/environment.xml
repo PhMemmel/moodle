@@ -5411,6 +5411,11 @@
       <PHP_EXTENSION name="sodium" level="required"/>
       <PHP_EXTENSION name="exif" level="optional"/>
       <PHP_EXTENSION name="filter" level="required"/>
+      <PHP_EXTENSION name="redis" level="optional">
+        <FEEDBACK>
+          <ON_CHECK message="redisrecommended" />
+        </FEEDBACK>
+      </PHP_EXTENSION>
     </PHP_EXTENSIONS>
     <PHP_SETTINGS>
       <PHP_SETTING name="memory_limit" value="96M" level="required">

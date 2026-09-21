@@ -21,3 +21,7 @@ notes:
         environment check as well. The minimum extension version is now
         inclusive, so exactly the minimum version is supported as well.
       type: improved
+    - message: >-
+        The Redis PHP extension is now listed as an optional extension in the
+        environment checks and as a suggested extension in composer.json.
+      type: improved
