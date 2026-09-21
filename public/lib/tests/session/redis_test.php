@@ -63,7 +63,7 @@ final class redis_test extends \advanced_testcase {
         $version = phpversion('Redis');
         if (!$version) {
             $this->markTestSkipped('Redis extension version missing');
-        } else if (version_compare($version, \core\session\redis::REDIS_MIN_EXTENSION_VERSION) <= 0) {
+        } else if (version_compare($version, \core\session\redis::REDIS_MIN_EXTENSION_VERSION, '<')) {
             $this->markTestSkipped('Redis extension version must be at least ' . \core\session\redis::REDIS_MIN_EXTENSION_VERSION .
                 ': now running "' . $version . '"');
         }

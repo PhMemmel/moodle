@@ -15,3 +15,9 @@ notes:
         check of the session handler in use is executed by the new environment
         check `\core\environment::check_session_handler`.
       type: improved
+    - message: >-
+        The Redis session handler no longer verifies the version of the phpredis
+        extension on each connection, this requirement is now verified by the new
+        environment check as well. The minimum extension version is now
+        inclusive, so exactly the minimum version is supported as well.
+      type: improved

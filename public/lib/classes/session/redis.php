@@ -257,15 +257,6 @@ class redis extends handler implements SessionHandlerInterface {
             );
         }
 
-        $version = phpversion('Redis');
-        if (!$version || version_compare($version, self::REDIS_MIN_EXTENSION_VERSION) <= 0) {
-            throw new exception(
-                errorcode: 'sessionhandlerproblem',
-                module: 'error',
-                debuginfo: sprintf('redis extension version must be at least %s', self::REDIS_MIN_EXTENSION_VERSION),
-            );
-        }
-
         $encrypt = (bool) ($this->sslopts ?? false);
         // Set Redis server(s).
         $trimmedservers = [];
@@ -456,16 +447,29 @@ class redis extends handler implements SessionHandlerInterface {
     }
 
     /**
-     * Environment check ensuring that the Redis server used for sessions meets the minimum version requirement.
+     * Environment check ensuring that the phpredis extension and the Redis server meet the version requirements.
      *
-     * This check replaces the version check which was previously performed on every connection of the session handler,
-     * which required an additional roundtrip to the server.
+     * This check replaces the version checks which were previously performed on every connection of the session
+     * handler, the server version check even required an additional roundtrip to the server.
      *
      * @param \environment_results $result The environment results object to update.
      * @return ?\environment_results The updated result, or null if the server could not be reached.
      */
     #[\Override]
     public function check_environment(\environment_results $result): ?\environment_results {
+        // Note: The extension itself is guaranteed to be loaded here, the session handler cannot even be used
+        // without it, see self::connect_to_redis().
+        $extensionversion = phpversion('Redis');
+
+        if (version_compare($extensionversion, self::REDIS_MIN_EXTENSION_VERSION, '<')) {
+            $result->setInfo('phpredis extension version');
+            $result->setStatus(false);
+            $result->setCurrentVersion($extensionversion);
+            $result->setNeededVersion(self::REDIS_MIN_EXTENSION_VERSION);
+
+            return $result;
+        }
+
         try {
             $this->connect_to_redis_if_required();
             $serverversion = $this->get_server_version();
