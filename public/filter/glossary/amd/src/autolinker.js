@@ -31,6 +31,9 @@ const Selectors = {
     glossaryEntryAutoLink: 'a.glossary.autolink.concept',
 };
 
+/** @var {boolean} registered Whether the event listeners have already been registered. */
+let registered = false;
+
 /**
  * Register the event listeners for the glossary entry auto-linker.
  *
@@ -146,5 +149,9 @@ const generateTagListData = async(tags) => {
  * Initialize the module.
  */
 export const init = () => {
+    if (registered) {
+        return;
+    }
+    registered = true;
     registerEventListeners();
 };
