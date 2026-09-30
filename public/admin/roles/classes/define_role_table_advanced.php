@@ -443,6 +443,8 @@ class core_role_define_role_table_advanced extends core_role_capability_table_wi
             $this->roleid = $this->role->id; // Needed to make the parent::save_changes(); call work.
         } else {
             // Updating role.
+            // The cache revision may have been changed by another process since the role was loaded, never write it back.
+            unset($this->role->cacherev);
             $DB->update_record('role', $this->role);
 
             // Trigger role updated event.

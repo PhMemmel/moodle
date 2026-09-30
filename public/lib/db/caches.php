@@ -324,6 +324,7 @@ $definitions = array(
         'simpledata' => true,
         'staticacceleration' => true,
         'staticaccelerationsize' => 30,
+        'canuselocalstore' => true,
     ),
 
     // Caches plugins existing functions by function name and file.

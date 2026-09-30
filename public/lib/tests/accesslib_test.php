@@ -30,6 +30,7 @@ defined('MOODLE_INTERNAL') || die();
  *
  * Note: execution may take many minutes especially on slower servers.
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('accesslib_build_role_definitions')]
 final class accesslib_test extends advanced_testcase {
 
     /**
@@ -809,8 +810,10 @@ final class accesslib_test extends advanced_testcase {
         $role = reset($allroles);
         $role = (array)$role;
 
-        $this->assertEqualsCanonicalizing(array('id', 'name', 'shortname', 'description', 'sortorder', 'archetype'),
-            array_keys($role));
+        $this->assertEqualsCanonicalizing(
+            ['id', 'name', 'shortname', 'description', 'sortorder', 'archetype', 'cacherev'],
+            array_keys($role)
+        );
 
         foreach ($allroles as $roleid => $role) {
             $this->assertEquals($role->id, $roleid);
@@ -832,7 +835,10 @@ final class accesslib_test extends advanced_testcase {
         $role = reset($allroles);
         $role = (array)$role;
 
-        $this->assertEqualsCanonicalizing(array('id', 'name', 'shortname', 'description', 'sortorder', 'archetype', 'coursealias'), array_keys($role));
+        $this->assertEqualsCanonicalizing(
+            ['id', 'name', 'shortname', 'description', 'sortorder', 'archetype', 'cacherev', 'coursealias'],
+            array_keys($role)
+        );
 
         foreach ($allroles as $roleid => $role) {
             $this->assertEquals($role->id, $roleid);
@@ -2324,9 +2330,14 @@ final class accesslib_test extends advanced_testcase {
      * @covers ::role_change_permission
      */
     public function test_role_definition_caching(): void {
-        global $DB;
+        global $CFG, $DB;
 
         $this->resetAfterTest();
+        // Role definitions are not stored in the MUC while a DB transaction is in progress.
+        $this->preventResetByRollback();
+
+        // Use a lock factory which does not query the database, so that the DB reads can be counted.
+        $CFG->lock_factory = '\core\lock\file_lock_factory';
 
         // Get some role ids.
         $authenticatedrole = $DB->get_record('role', array('shortname' => 'user'), '*', MUST_EXIST);
@@ -2347,20 +2358,21 @@ final class accesslib_test extends advanced_testcase {
 
         // Now load some role definitions, and check when it queries the database.
 
-        // Load the capabilities for two roles. Should be one query.
+        // Load the capabilities for two roles. Should be one simple query for the role revisions,
+        // one recordset query for the role definitions and one simple query to recheck the revisions before storing.
         $startdbreads = $DB->perf_get_reads();
         get_role_definitions([$authenticatedrole->id, $studentrole->id]);
-        $this->assertEquals(1 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
+        $this->assertEquals(2 + 1 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
 
         // Load the capabilities for same two roles. Should not query the DB.
         $startdbreads = $DB->perf_get_reads();
         get_role_definitions([$authenticatedrole->id, $studentrole->id]);
         $this->assertEquals(0 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
 
-        // Include a third role. Should do one DB query.
+        // Include a third role. Should do one recordset query and one simple query to recheck the revision.
         $startdbreads = $DB->perf_get_reads();
         get_role_definitions([$authenticatedrole->id, $studentrole->id, $emptyroleid]);
-        $this->assertEquals(1 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
+        $this->assertEquals(1 + 1 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
 
         // Repeat call. No DB queries.
         $startdbreads = $DB->perf_get_reads();
@@ -2370,10 +2382,10 @@ final class accesslib_test extends advanced_testcase {
         // Alter a role.
         role_change_permission($studentrole->id, $coursecontext, 'moodle/course:tag', CAP_ALLOW);
 
-        // Should now know to do one query.
+        // Should now know to reload the role revisions and the altered role definition.
         $startdbreads = $DB->perf_get_reads();
         get_role_definitions([$authenticatedrole->id, $studentrole->id]);
-        $this->assertEquals(1 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
+        $this->assertEquals(2 + 1 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
 
         // Now clear the in-memory cache, and verify that it does not query the DB.
         // Cannot use accesslib_clear_all_caches_for_unit_testing since that also
@@ -2386,6 +2398,383 @@ final class accesslib_test extends advanced_testcase {
         get_role_definitions([$authenticatedrole->id, $studentrole->id, $emptyroleid]);
         $this->assertEquals(0 * $readsperquery, $DB->perf_get_reads() - $startdbreads);
     }
+
+    /**
+     * Test that changing a role definition only increments the cache revision of the affected role.
+     *
+     * @covers ::accesslib_clear_role_cache
+     * @covers ::update_capabilities
+     * @covers ::accesslib_increment_role_cacherev
+     */
+    public function test_role_definition_cacherev_increment(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        $teacherrole = $DB->get_record('role', ['shortname' => 'teacher'], '*', MUST_EXIST);
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $studentrev = (int) $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]);
+        $teacherrev = (int) $DB->get_field('role', 'cacherev', ['id' => $teacherrole->id]);
+
+        assign_capability('moodle/course:tag', CAP_ALLOW, $studentrole->id, $coursecontext);
+
+        $this->assertGreaterThan($studentrev, (int) $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]));
+        $this->assertEquals($teacherrev, (int) $DB->get_field('role', 'cacherev', ['id' => $teacherrole->id]));
+
+        // Only resetting the role cache does not change any revision.
+        $studentrev = (int) $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]);
+        accesslib_reset_role_cache();
+        $this->assertEquals($studentrev, (int) $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]));
+        $this->assertEquals($teacherrev, (int) $DB->get_field('role', 'cacherev', ['id' => $teacherrole->id]));
+
+        // Updating the capabilities of a component increments the revision of all roles.
+        update_capabilities('moodle');
+        $this->assertGreaterThan($studentrev, (int) $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]));
+        $this->assertGreaterThan($teacherrev, (int) $DB->get_field('role', 'cacherev', ['id' => $teacherrole->id]));
+    }
+
+    /**
+     * Test that purging all caches increments the cache revision of all roles.
+     *
+     * @covers ::purge_other_caches
+     */
+    public function test_purge_other_caches_increments_role_cacherev(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $before = array_map('intval', $DB->get_records_menu('role', null, '', 'id, cacherev'));
+        purge_other_caches();
+        $after = array_map('intval', $DB->get_records_menu('role', null, '', 'id, cacherev'));
+
+        foreach ($before as $roleid => $revision) {
+            $this->assertGreaterThan($revision, $after[$roleid]);
+        }
+    }
+
+    /**
+     * Test that cached role definitions are only used if they match the current role revision.
+     *
+     * This simulates a local cache store on another node, which still holds an outdated definition.
+     *
+     * @covers ::get_role_definitions
+     */
+    public function test_role_definition_outdated_cache_entry(): void {
+        global $ACCESSLIB_PRIVATE, $DB;
+
+        $this->resetAfterTest();
+        // Role definitions are not stored in the MUC while a DB transaction is in progress.
+        $this->preventResetByRollback();
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        $cache = cache::make('core', 'roledefs');
+        $fakedefinition = ['/1' => ['moodle/site:config' => CAP_ALLOW]];
+
+        // Populate the cache with the correct definition first, so the revisions are loaded.
+        $realdefinition = get_role_definitions([$studentrole->id])[$studentrole->id];
+        $revision = accesslib_get_role_cacherevs()[$studentrole->id];
+        $this->assertEquals($realdefinition, $cache->get_versioned($studentrole->id, $revision));
+
+        // A cached entry matching the current revision is used as it is.
+        $cache->set_versioned($studentrole->id, $revision, $fakedefinition);
+        $ACCESSLIB_PRIVATE->cacheroledefs = [];
+        $this->assertEquals($fakedefinition, get_role_definitions([$studentrole->id])[$studentrole->id]);
+
+        // Another node changes the role, only the revision in the DB is incremented.
+        $DB->set_field('role', 'cacherev', $revision + 1, ['id' => $studentrole->id]);
+        $ACCESSLIB_PRIVATE->cacheroledefs = [];
+        $ACCESSLIB_PRIVATE->roledefrevs = null;
+
+        // The outdated entry must not be used, the definition is rebuilt and stored with the new revision.
+        $this->assertEquals($realdefinition, get_role_definitions([$studentrole->id])[$studentrole->id]);
+        $this->assertEquals($realdefinition, $cache->get_versioned($studentrole->id, $revision + 1));
+    }
+
+    /**
+     * Test that role definitions built within a transaction are not stored in the MUC.
+     *
+     * @covers ::get_role_definitions
+     */
+    public function test_role_definition_not_cached_in_transaction(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        accesslib_reset_role_cache();
+        $cache = cache::make('core', 'roledefs');
+
+        $transaction = $DB->start_delegated_transaction();
+        $rdefs = get_role_definitions([$studentrole->id]);
+        $revision = accesslib_get_role_cacherevs()[$studentrole->id];
+        $transaction->allow_commit();
+
+        $this->assertArrayHasKey($studentrole->id, $rdefs);
+        $this->assertFalse($cache->get_versioned($studentrole->id, $revision));
+    }
+
+    /**
+     * Test that role definitions are read from the MUC within a transaction.
+     *
+     * @covers ::get_role_definitions
+     */
+    public function test_role_definition_read_from_cache_in_transaction(): void {
+        global $ACCESSLIB_PRIVATE, $DB;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        accesslib_reset_role_cache();
+        $cache = cache::make('core', 'roledefs');
+        $fakedefinition = ['/1' => ['moodle/site:config' => CAP_ALLOW]];
+        $cache->set_versioned($studentrole->id, accesslib_get_role_cacherevs()[$studentrole->id], $fakedefinition);
+        $ACCESSLIB_PRIVATE->cacheroledefs = [];
+
+        $transaction = $DB->start_delegated_transaction();
+        $rdefs = get_role_definitions([$studentrole->id]);
+        $transaction->allow_commit();
+
+        $this->assertEquals([$studentrole->id => $fakedefinition], $rdefs);
+    }
+
+    /**
+     * Test that a process not getting the lock uses the definition stored by the process holding the lock.
+     *
+     * @covers ::accesslib_build_role_definitions
+     */
+    public function test_build_role_definitions_uses_cache_while_locked(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+        // The file lock factory refuses a second lock on the same resource within one process, like another process would.
+        $CFG->lock_factory = '\core\lock\file_lock_factory';
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        $revisions = accesslib_get_role_cacherevs();
+        $cache = cache::make('core', 'roledefs');
+        $fakedefinition = ['/1' => ['moodle/site:config' => CAP_ALLOW]];
+
+        $lock = \core\lock\lock_config::get_lock_factory('core_roledefs')->get_lock('roledef_' . $studentrole->id, 0);
+        $this->assertNotFalse($lock);
+        try {
+            // The process holding the lock has stored the definition in the meantime.
+            $cache->set_versioned($studentrole->id, $revisions[$studentrole->id], $fakedefinition);
+            $rdefs = accesslib_build_role_definitions([$studentrole->id]);
+        } finally {
+            $lock->release();
+        }
+
+        $this->assertEquals([$studentrole->id => $fakedefinition], $rdefs);
+    }
+
+    /**
+     * Test that the definition is built without lock if the process holding the lock does not store it in time.
+     *
+     * @covers ::accesslib_build_role_definitions
+     */
+    public function test_build_role_definitions_builds_after_lock_timeout(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+        // The file lock factory refuses a second lock on the same resource within one process, like another process would.
+        $CFG->lock_factory = '\core\lock\file_lock_factory';
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        accesslib_reset_role_cache();
+        $revisions = accesslib_get_role_cacherevs();
+        $cache = cache::make('core', 'roledefs');
+        $expected = get_role_definitions_uncached([$studentrole->id]);
+
+        $lock = \core\lock\lock_config::get_lock_factory('core_roledefs')->get_lock('roledef_' . $studentrole->id, 0);
+        $this->assertNotFalse($lock);
+        try {
+            $start = hrtime(true);
+            $rdefs = accesslib_build_role_definitions([$studentrole->id]);
+            $elapsed = (hrtime(true) - $start) / 1000000000;
+        } finally {
+            $lock->release();
+        }
+
+        $this->assertEquals($expected, $rdefs);
+        $this->assertGreaterThanOrEqual(ACCESSLIB_ROLEDEFS_LOCK_TIMEOUT, $elapsed);
+        $this->assertEquals($expected[$studentrole->id], $cache->get_versioned($studentrole->id, $revisions[$studentrole->id]));
+    }
+
+    /**
+     * Test that a definition built with outdated revisions is not stored, so it cannot overwrite a newer cache entry.
+     *
+     * @covers ::accesslib_build_role_definitions
+     */
+    public function test_build_role_definitions_does_not_store_outdated_revision(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        accesslib_reset_role_cache();
+        $revisions = accesslib_get_role_cacherevs();
+        $cache = cache::make('core', 'roledefs');
+
+        // Another process changes the role after the revisions have been loaded.
+        $DB->set_field('role', 'cacherev', $revisions[$studentrole->id] + 1, ['id' => $studentrole->id]);
+
+        $rdefs = accesslib_build_role_definitions([$studentrole->id]);
+
+        $this->assertEquals(get_role_definitions_uncached([$studentrole->id]), $rdefs);
+        $this->assertFalse($cache->get_versioned($studentrole->id, $revisions[$studentrole->id]));
+    }
+
+    /**
+     * Optional locking failures must not prevent role definitions from being loaded.
+     *
+     * @param bool $acquisitionfailure Whether acquisition, rather than factory creation, fails.
+     * @param int $failafter Number of successful acquisitions before the backend fails.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('build_role_definitions_lock_failure_provider')]
+    public function test_build_role_definitions_lock_failure(bool $acquisitionfailure, int $failafter): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+        $roleids = [(int) $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST)];
+        $roleids[] = create_role('Empty role', 'emptylocktest', '');
+        $expected = get_role_definitions_uncached($roleids);
+        accesslib_reset_role_cache();
+
+        $factory = new class('core_roledefs') extends \core\lock\installation_lock_factory {
+            /** @var int Number of acquisition attempts. */
+            public static int $attempts = 0;
+
+            /** @var int Number of successful acquisitions before failure. */
+            public static int $failafter = 0;
+
+            /** @var int Number of released locks. */
+            public static int $released = 0;
+
+            /** @return bool Always available for this test. */
+            public function is_available(): bool {
+                return true;
+            }
+
+            /**
+             * Simulate an unavailable lock backend.
+             *
+             * @param string $resource Lock resource.
+             * @param int $timeout Acquisition timeout.
+             * @param int $maxlifetime Lock lifetime.
+             * @return \core\lock\lock The lock, before the configured failure.
+             * @throws moodle_exception Once the configured successful acquisitions have completed.
+             */
+            public function get_lock($resource, $timeout, $maxlifetime = 86400) {
+                self::$attempts++;
+                if (self::$attempts <= self::$failafter) {
+                    return parent::get_lock($resource, $timeout, $maxlifetime);
+                }
+                throw new moodle_exception('locktimeout');
+            }
+
+            /**
+             * Count released locks.
+             *
+             * @param \core\lock\lock $lock The acquired lock.
+             * @return bool Whether the lock was released.
+             */
+            public function release_lock(\core\lock\lock $lock): bool {
+                self::$released++;
+                return parent::release_lock($lock);
+            }
+        };
+        $factory::$attempts = 0;
+        $factory::$failafter = $failafter;
+        $factory::$released = 0;
+        $CFG->lock_factory = $acquisitionfailure ? $factory::class : '\\core\\lock\\missing_roledefs_test_factory';
+
+        $this->assertEquals($expected, accesslib_build_role_definitions($roleids));
+        $this->assertDebuggingCalled('Could not acquire a role definition cache lock. Building without a lock.');
+        $this->assertSame($acquisitionfailure ? $failafter + 1 : 0, $factory::$attempts);
+        $this->assertSame($failafter, $factory::$released);
+        $cache = cache::make('core', 'roledefs');
+        $revisions = accesslib_get_role_cacherevs();
+        foreach ($roleids as $roleid) {
+            $this->assertEquals($expected[$roleid], $cache->get_versioned($roleid, $revisions[$roleid]));
+        }
+
+        // A cache hit must not attempt to use the broken lock backend again.
+        $this->assertEquals($expected, accesslib_build_role_definitions($roleids));
+        $this->assertSame($acquisitionfailure ? $failafter + 1 : 0, $factory::$attempts);
+    }
+
+    /** @return array Named lock failure cases. */
+    public static function build_role_definitions_lock_failure_provider(): array {
+        return [
+            'factory_creation_failure' => [false, 0],
+            'lock_acquisition_failure' => [true, 0],
+            'failure_after_acquiring_lock' => [true, 1],
+        ];
+    }
+
+    /**
+     * Test that the role cache revision never decreases, even if it is far ahead of the current time.
+     *
+     * @covers ::accesslib_increment_role_cacherev
+     */
+    public function test_role_cacherev_never_decreases(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $clock = $this->mock_clock_with_frozen(1000000);
+
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+        $teacherrole = $DB->get_record('role', ['shortname' => 'teacher'], '*', MUST_EXIST);
+
+        // A revision in the past is set to the current time.
+        $DB->set_field('role', 'cacherev', 500, ['id' => $studentrole->id]);
+        accesslib_increment_role_cacherev([$studentrole->id]);
+        $this->assertEquals($clock->time(), $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]));
+
+        // A revision far ahead of the current time (many changes within a short time) is still incremented.
+        $DB->set_field('role', 'cacherev', $clock->time() + 10000, ['id' => $studentrole->id]);
+        $DB->set_field('role', 'cacherev', $clock->time() + 20000, ['id' => $teacherrole->id]);
+        accesslib_increment_role_cacherev();
+        $this->assertEquals($clock->time() + 10001, $DB->get_field('role', 'cacherev', ['id' => $studentrole->id]));
+        $this->assertEquals($clock->time() + 20001, $DB->get_field('role', 'cacherev', ['id' => $teacherrole->id]));
+    }
+
+    /**
+     * Test that a cached definition of a deleted role is not used.
+     *
+     * This simulates a local cache store on another node, which still holds the definition of the deleted role.
+     *
+     * @covers ::get_role_definitions
+     */
+    public function test_role_definition_deleted_role_not_from_cache(): void {
+        global $ACCESSLIB_PRIVATE;
+
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+
+        $roleid = create_role('Test role', 'testrole', '');
+        assign_capability('moodle/course:tag', CAP_ALLOW, $roleid, context_system::instance());
+        $definition = get_role_definitions([$roleid])[$roleid];
+        $this->assertNotEmpty($definition);
+        $revision = accesslib_get_role_cacherevs()[$roleid];
+
+        delete_role($roleid);
+        cache::make('core', 'roledefs')->set_versioned($roleid, $revision, $definition);
+        $ACCESSLIB_PRIVATE->cacheroledefs = [];
+        $ACCESSLIB_PRIVATE->roledefrevs = null;
+
+        $this->assertSame([$roleid => []], get_role_definitions([$roleid]));
+    }
+
 
     /**
      * Tests get_user_capability_course() which checks a capability across all courses.

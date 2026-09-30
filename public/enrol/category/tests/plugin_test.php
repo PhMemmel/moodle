@@ -75,6 +75,8 @@ final class plugin_test extends \advanced_testcase {
         $this->assertNotEmpty($studentrole);
 
         $this->enable_role_sync($studentrole->id);
+        // Changing the role definition increments the role cache revision, so reload the role.
+        $studentrole = $DB->get_record('role', ['id' => $studentrole->id]);
         $roles = get_roles_with_capability('enrol/category:synchronised', CAP_ALLOW, $syscontext);
         $this->assertEquals(1, count($roles));
         $this->assertEquals($studentrole, reset($roles));
