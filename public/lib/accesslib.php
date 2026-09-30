@@ -166,6 +166,32 @@ if (!defined('CONTEXT_CACHE_MAX_SIZE')) {
     define('CONTEXT_CACHE_MAX_SIZE', 2500);
 }
 
+if (!defined('ACCESSLIB_ROLEDEFS_LOCK_TIMEOUT')) {
+    /**
+     * Seconds to wait for another process building the same role definition before building it ourselves.
+     *
+     * The lock only avoids concurrent rebuilds of the same role definition, correctness does not depend on it.
+     */
+    define('ACCESSLIB_ROLEDEFS_LOCK_TIMEOUT', 2);
+}
+
+if (!defined('ACCESSLIB_ROLEDEFS_POLL_INTERVAL')) {
+    /**
+     * Maximum microseconds to sleep between two checks while another process is building a role definition.
+     */
+    define('ACCESSLIB_ROLEDEFS_POLL_INTERVAL', 50000);
+}
+
+if (!defined('ACCESSLIB_ROLEDEFS_LOCK_MAXLIFETIME')) {
+    /**
+     * Lock lifetime in seconds for backends supporting expiry; session and file locks may ignore this value.
+     */
+    define('ACCESSLIB_ROLEDEFS_LOCK_MAXLIFETIME', 60);
+}
+
+/** Core version which introduced the role.cacherev field. */
+define('ACCESSLIB_ROLE_CACHEREV_VERSION', 2026092800.01);
+
 /** Performance hint for assign_capability: the contextid is known to exist */
 define('ACCESSLIB_HINT_CONTEXT_EXISTS', 'contextexists');
 /** Performance hint for assign_capability: there is no existing entry in role_capabilities */
@@ -186,6 +212,7 @@ define('ACCESSLIB_HINT_NO_EXISTING', 'notexists');
 global $ACCESSLIB_PRIVATE;
 $ACCESSLIB_PRIVATE = new stdClass();
 $ACCESSLIB_PRIVATE->cacheroledefs    = array(); // Holds site-wide role definitions.
+$ACCESSLIB_PRIVATE->roledefrevs      = null;    // Role definition revisions (role.cacherev), loaded from DB once per page.
 $ACCESSLIB_PRIVATE->dirtycontexts    = null;    // Dirty contexts cache, loaded from DB once per page
 $ACCESSLIB_PRIVATE->dirtyusers       = null;    // Dirty users cache, loaded from DB once per $USER->id
 $ACCESSLIB_PRIVATE->accessdatabyuser = array(); // Holds the cache of $accessdata structure for users (including $USER)
@@ -242,6 +269,9 @@ function accesslib_clear_all_caches($resetcontexts) {
  *
  * @see accesslib_clear_role_cache()
  *
+ * Note: This only purges the caches reachable from this process. If role definitions have been changed,
+ * call accesslib_increment_role_cacherev() first, so that local cache stores on other nodes are invalidated too.
+ *
  * @access private
  * @return void
  */
@@ -249,6 +279,7 @@ function accesslib_reset_role_cache() {
     global $ACCESSLIB_PRIVATE;
 
     $ACCESSLIB_PRIVATE->cacheroledefs = array();
+    $ACCESSLIB_PRIVATE->roledefrevs = null;
     $cache = cache::make('core', 'roledefs');
     $cache->purge();
 }
@@ -275,8 +306,78 @@ function accesslib_clear_role_cache($roles) {
         }
     }
 
+    // Invalidates the definitions of these roles in all cache stores, including local stores on other nodes.
+    accesslib_increment_role_cacherev($roles);
+
+    // Not strictly needed because of the revision, but frees the space in the stores reachable from here.
     $cache = cache::make('core', 'roledefs');
     $cache->delete_many($roles);
+}
+
+/**
+ * Checks if the role.cacherev field is available, which is not the case during install or before the upgrade.
+ *
+ * @return bool
+ */
+function accesslib_role_cacherev_available(): bool {
+    global $CFG;
+
+    return !during_initial_install() && !empty($CFG->version) && $CFG->version >= ACCESSLIB_ROLE_CACHEREV_VERSION;
+}
+
+/**
+ * Increments the cache revision of the given roles, or of all roles. ONLY TO BE USED FROM THIS LIBRARY FILE!
+ *
+ * Must be called after the role definition has been changed in the database (within the same transaction, if any).
+ * The revisions are read before the definitions are built, so a cached definition is never older than its revision.
+ *
+ * Unlike increment_revision_number(), the revision never decreases: cached definitions are accepted if their version
+ * is at least the current revision, so a decreasing revision would make outdated definitions valid again.
+ *
+ * @param array|null $roleids List of role ids, null means all roles.
+ * @return void
+ */
+function accesslib_increment_role_cacherev(?array $roleids = null): void {
+    global $ACCESSLIB_PRIVATE, $DB;
+
+    if (accesslib_role_cacherev_available() && ($roleids === null || !empty($roleids))) {
+        $now = \core\di::get(\core\clock::class)->time();
+        $params = ['now1' => $now, 'now2' => $now];
+        $where = '';
+        if ($roleids !== null) {
+            [$insql, $inparams] = $DB->get_in_or_equal($roleids, SQL_PARAMS_NAMED);
+            $where = "WHERE id $insql";
+            $params += $inparams;
+        }
+        $DB->execute(
+            "UPDATE {role}
+                SET cacherev = (CASE WHEN cacherev < :now1 THEN :now2 ELSE cacherev + 1 END)
+                $where",
+            $params
+        );
+    }
+
+    // Force reloading of the revisions on next use.
+    $ACCESSLIB_PRIVATE->roledefrevs = null;
+}
+
+/**
+ * Returns the cache revisions of all roles, loaded once per request. ONLY TO BE USED FROM THIS LIBRARY FILE!
+ *
+ * @return array|null Array roleid => revision, null if revisions are not available (install/upgrade).
+ */
+function accesslib_get_role_cacherevs(): ?array {
+    global $ACCESSLIB_PRIVATE, $DB;
+
+    if (!accesslib_role_cacherev_available()) {
+        return null;
+    }
+
+    if ($ACCESSLIB_PRIVATE->roledefrevs === null) {
+        $ACCESSLIB_PRIVATE->roledefrevs = array_map('intval', $DB->get_records_menu('role', null, '', 'id, cacherev'));
+    }
+
+    return $ACCESSLIB_PRIVATE->roledefrevs;
 }
 
 /**
@@ -309,23 +410,120 @@ function get_role_definitions(array $roleids) {
 
     // Grab all keys we have not yet got in our static cache.
     if ($uncached = array_diff($roleids, array_keys($ACCESSLIB_PRIVATE->cacheroledefs))) {
-        $cache = cache::make('core', 'roledefs');
-        foreach ($cache->get_many($uncached) as $roleid => $cachedroledef) {
-            if (is_array($cachedroledef)) {
-                $ACCESSLIB_PRIVATE->cacheroledefs[$roleid] = $cachedroledef;
-            }
-        }
-
-        // Check we have the remaining keys from the MUC.
-        if ($uncached = array_diff($roleids, array_keys($ACCESSLIB_PRIVATE->cacheroledefs))) {
-            $uncached = get_role_definitions_uncached($uncached);
-            $ACCESSLIB_PRIVATE->cacheroledefs += $uncached;
-            $cache->set_many($uncached);
-        }
+        $ACCESSLIB_PRIVATE->cacheroledefs += accesslib_build_role_definitions($uncached);
     }
 
     // Return just the roles we need.
     return array_intersect_key($ACCESSLIB_PRIVATE->cacheroledefs, array_flip($roleids));
+}
+
+/**
+ * Loads role definitions from the MUC, building and storing missing ones. ONLY TO BE USED FROM THIS LIBRARY FILE!
+ *
+ * Normally one process builds a definition at a time: on a cache miss the lock is requested without waiting. Processes
+ * which do not get the lock do not queue for it, they poll the cache until the definition shows up, so they can all
+ * read it in parallel. They try the lock again on each poll, which covers local-only cache stores where the definition
+ * built by another node never becomes visible. After ACCESSLIB_ROLEDEFS_LOCK_TIMEOUT the definition is built without
+ * lock. Factory or acquisition failures also fall back to an unlocked build; the lock is only an optimisation.
+ *
+ * @param array $roleids List of role ids to load definitions for.
+ * @return array Complete definition for each requested role.
+ */
+function accesslib_build_role_definitions(array $roleids): array {
+    global $DB;
+
+    $revisions = accesslib_get_role_cacherevs();
+    if ($revisions === null) {
+        // Without revisions (install/upgrade) the MUC cannot be used safely.
+        return get_role_definitions_uncached($roleids);
+    }
+
+    // Within a transaction the built data may contain uncommitted changes that could still be rolled back, so it is
+    // neither locked nor stored. Reading is safe, the MUC only contains committed data.
+    $intransaction = $DB->is_transaction_started();
+    $cache = cache::make('core', 'roledefs');
+    // Only created on a cache miss, as some lock factories connect to their backend on creation.
+    $lockfactory = null;
+    $lockingfailed = false;
+    $giveuptime = hrtime(true) + ACCESSLIB_ROLEDEFS_LOCK_TIMEOUT * 1000000000;
+    // Keyed by role id, so that role ids can be removed and merged without reindexing.
+    $pending = array_combine($roleids, $roleids);
+    // Roles without revision (deleted, or created by another process after loading the revisions) cannot be validated,
+    // so any cached entry could be outdated. Build them without using the MUC.
+    $unknown = array_diff_key($pending, $revisions);
+    $pending = array_diff_key($pending, $unknown);
+    $rdefs = $unknown ? get_role_definitions_uncached($unknown) : [];
+
+    while ($pending) {
+        $locks = [];
+        $tobuild = [];
+        try {
+            foreach ($pending as $roleid) {
+                $cachedroledef = $cache->get_versioned($roleid, $revisions[$roleid]);
+                if (!is_array($cachedroledef) && !$intransaction && !$lockingfailed) {
+                    $lock = false;
+                    try {
+                        $lockfactory ??= \core\lock\lock_config::get_lock_factory('core_roledefs');
+                        // Do not wait for lock ownership; backend I/O may still take time.
+                        $lock = $lockfactory->get_lock('roledef_' . $roleid, 0, ACCESSLIB_ROLEDEFS_LOCK_MAXLIFETIME);
+                    } catch (\moodle_exception $e) {
+                        // Locking is optional. Do not retry a broken backend for every role or poll.
+                        $lockingfailed = true;
+                        debugging('Could not acquire a role definition cache lock. Building without a lock.', DEBUG_DEVELOPER);
+                    }
+                    if ($lock) {
+                        $locks[] = $lock;
+                        // Look into the cache again: another process may have stored it and released the lock meanwhile.
+                        $cachedroledef = $cache->get_versioned($roleid, $revisions[$roleid]);
+                        if (!is_array($cachedroledef)) {
+                            $tobuild[$roleid] = $roleid;
+                            unset($pending[$roleid]);
+                        }
+                    }
+                }
+
+                if (is_array($cachedroledef)) {
+                    $rdefs[$roleid] = $cachedroledef;
+                    unset($pending[$roleid]);
+                }
+            }
+
+            if ($pending && ($intransaction || $lockingfailed || hrtime(true) >= $giveuptime)) {
+                // Within a transaction nothing is stored, so there is nothing to wait for. Otherwise the other process
+                // takes too long or locking failed, so build the remaining definitions without a lock.
+                $tobuild += $pending;
+                $pending = [];
+            }
+
+            if ($tobuild) {
+                // The revisions have been read before the definitions, so the stored data is at least as new as the revision.
+                $built = get_role_definitions_uncached($tobuild);
+                if (!$intransaction) {
+                    // Skip known outdated revisions. This is not atomic with the cache write; readers still validate versions.
+                    [$insql, $params] = $DB->get_in_or_equal(array_keys($built), SQL_PARAMS_NAMED);
+                    $currentrevisions = $DB->get_records_select_menu('role', "id $insql", $params, '', 'id, cacherev');
+                    foreach ($built as $roleid => $rdef) {
+                        $revision = $revisions[$roleid];
+                        if (isset($currentrevisions[$roleid]) && (int) $currentrevisions[$roleid] === $revision) {
+                            $cache->set_versioned($roleid, $revision, $rdef);
+                        }
+                    }
+                }
+                $rdefs += $built;
+            }
+        } finally {
+            foreach ($locks as $lock) {
+                $lock->release();
+            }
+        }
+
+        if ($pending) {
+            // Random delay, so that the waiting processes do not all hit the cache at the same moment.
+            usleep(random_int((int) (ACCESSLIB_ROLEDEFS_POLL_INTERVAL / 2), ACCESSLIB_ROLEDEFS_POLL_INTERVAL));
+        }
+    }
+
+    return $rdefs;
 }
 
 /**
@@ -1319,6 +1517,7 @@ function create_role($name, $shortname, $description, $archetype = '') {
     $role->shortname   = $shortname;
     $role->description = $description;
     $role->archetype   = $archetype;
+    $role->cacherev    = 0;
 
     //find free sortorder number
     $role->sortorder = $DB->get_field('role', 'MAX(sortorder) + 1', array());
@@ -2429,6 +2628,7 @@ function update_capabilities($component = 'moodle') {
     capabilities_cleanup($component, $filecaps);
 
     // reset static caches
+    accesslib_increment_role_cacherev();
     accesslib_reset_role_cache();
 
     // Flush the cached again, as we have changed DB.

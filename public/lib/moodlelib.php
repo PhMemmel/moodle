@@ -1275,6 +1275,9 @@ function purge_other_caches() {
         // Ignore exception since this function is also called before upgrade script when field course.cacherev does not exist yet.
     }
 
+    // Bump up cacherev field for all roles, this invalidates role definitions in local cache stores on all nodes.
+    accesslib_increment_role_cacherev();
+
     $DB->reset_caches();
 
     // Purge all other caches: rss, simplepie, etc.
