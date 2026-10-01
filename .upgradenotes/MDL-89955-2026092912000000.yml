@@ -6,8 +6,8 @@ notes:
         field and can be mapped to a local cache store. On clustered sites it is
         recommended to map it to a local store (for example APCu) as primary
         store and to a shared store (for example Redis) as final store, so that
-        each role definition is only rebuilt once per change and all other nodes
-        fetch it from the shared store.
+        rebuilt definitions can be reused by other nodes. Lock timeouts or
+        acquisition failures can still result in concurrent rebuilds.
 
 
         Code changing role capabilities directly in the database must call
@@ -15,5 +15,7 @@ notes:
         `role.cacherev`. `accesslib_reset_role_cache()` only purges the caches
         reachable from the current process, so it has to be preceded by
         `accesslib_increment_role_cacherev()` if role definitions have changed.
+        Do not write back `role.cacherev` when updating role records, as this
+        could make outdated cached role definitions valid again.
       type: changed
 
