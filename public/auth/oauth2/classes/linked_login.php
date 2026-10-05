@@ -99,18 +99,25 @@ class linked_login extends persistent {
      */
     public static function delete_orphaned($issuerid = false) {
         global $DB;
-        // Delete any linked_login entries with a issuerid
-        // which does not exist in the issuer table.
-        // In the left join, the issuer id will be null
-        // where a match linked_login.issuerid is not found.
-        $sql = "DELETE FROM {" . self::TABLE . "}
-                 WHERE issuerid NOT IN (SELECT id FROM {" . \core\oauth2\issuer::TABLE . "})";
-        $params = [];
+        // Determine the issuer ids referenced by linked logins first. The DISTINCT query can be answered
+        // from the issuerid index alone (loose index scan), so neither a full table scan nor a write
+        // statement is needed in the common case where there are no orphaned linked logins.
         if (!empty($issuerid)) {
-            $sql .= ' AND issuerid = ?';
-            $params['issuerid'] = $issuerid;
+            $linkedissuerids = [$issuerid];
+        } else {
+            $linkedissuerids = $DB->get_fieldset_sql("SELECT DISTINCT issuerid FROM {" . self::TABLE . "}");
         }
-        return $DB->execute($sql, $params);
+        if (empty($linkedissuerids)) {
+            return true;
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($linkedissuerids, SQL_PARAMS_NAMED);
+        $existingissuerids = $DB->get_fieldset_select(\core\oauth2\issuer::TABLE, 'id', "id $insql", $params);
+        $orphanedissuerids = array_diff($linkedissuerids, $existingissuerids);
+        if (!empty($orphanedissuerids)) {
+            $DB->delete_records_list(self::TABLE, 'issuerid', $orphanedissuerids);
+        }
+        return true;
     }
 
     /**
@@ -122,11 +129,18 @@ class linked_login extends persistent {
     public static function delete_expired_confirmation_tokens(): void {
         global $DB;
 
-        $sql = "
-        DELETE FROM {" . self::TABLE . "}
-        WHERE confirmtokenexpires <> 0 AND confirmtokenexpires < :now";
+        $where = 'confirmtokenexpires > 0 AND confirmtokenexpires < :now';
+        $params = ['now' => di::get(clock::class)->now()->getTimestamp()];
 
-        $DB->execute($sql, ['now' => di::get(clock::class)->now()->getTimestamp()]);
+        // Select the ids first with a non-locking read to avoid locking the entire table for the duration of the delete operation.
+        $ids = $DB->get_fieldset_select(self::TABLE, 'id', $where, $params);
+
+        // Delete by primary key in chunks, re-checking the expiry condition so that records confirmed
+        // in the meantime are not deleted.
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            [$insql, $inparams] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+            $DB->delete_records_select(self::TABLE, "id $insql AND $where", $inparams + $params);
+        }
     }
 
     /**
