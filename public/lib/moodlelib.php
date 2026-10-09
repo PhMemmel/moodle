@@ -4910,6 +4910,7 @@ function reset_course_userdata($data, ?\core_course\exception\reset_timeout $tim
     require_once($CFG->libdir.'/completionlib.php');
     require_once($CFG->dirroot.'/completion/criteria/completion_criteria_date.php');
     require_once($CFG->dirroot.'/group/lib.php');
+    require_once($CFG->dirroot . '/course/lib.php');
 
     $data->courseid = $data->id;
     $context = context_course::instance($data->courseid);
