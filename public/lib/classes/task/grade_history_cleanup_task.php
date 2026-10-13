@@ -31,6 +31,8 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class grade_history_cleanup_task extends scheduled_task {
+    /** @var int Maximum number of records deleted per query, to keep transactions (and replicated changes) small. */
+    const DELETE_CHUNK_SIZE = 500;
 
     /**
      * Get a descriptive name for this task (shown to admins).
@@ -45,10 +47,10 @@ class grade_history_cleanup_task extends scheduled_task {
      * Cleanup history tables.
      */
     public function execute() {
-        global $CFG, $DB;
+        global $CFG;
 
         if (!empty($CFG->gradehistorylifetime)) {
-            $now = time();
+            $now = \core\di::get(\core\clock::class)->time();
             $histlifetime = $now - ($CFG->gradehistorylifetime * DAYSECS);
             $tables = [
                 'grade_outcomes_history',
@@ -58,10 +60,45 @@ class grade_history_cleanup_task extends scheduled_task {
                 'scale_history'
             ];
             foreach ($tables as $table) {
-                if ($DB->delete_records_select($table, "timemodified < ?", [$histlifetime])) {
-                    mtrace("    Deleted old grade history records from '$table'");
-                }
+                $this->delete_old_records_in_chunks($table, $histlifetime);
+                mtrace("Deleted old grade history records from '$table'");
             }
         }
+    }
+
+    /**
+     * Deletes all records older than the given timestamp from the given table in chunks.
+     *
+     * @param string $table The history table to clean up.
+     * @param int $histlifetime Records with timemodified before this timestamp will be deleted.
+     */
+    protected function delete_old_records_in_chunks(string $table, int $histlifetime): void {
+        global $DB;
+
+        $params = ['histlifetime' => $histlifetime];
+        while (
+            $boundaries = $DB->get_records_select(
+                $table,
+                'timemodified < :histlifetime',
+                $params,
+                'timemodified ASC, id ASC',
+                'id, timemodified',
+                self::DELETE_CHUNK_SIZE - 1,
+                1
+            )
+        ) {
+            $boundary = reset($boundaries);
+            $DB->throttled_write(fn() => $DB->delete_records_select(
+                $table,
+                'timemodified < :boundarytime OR (timemodified = :boundarytimeeq AND id <= :boundaryid)',
+                [
+                    'boundarytime' => $boundary->timemodified,
+                    'boundarytimeeq' => $boundary->timemodified,
+                    'boundaryid' => $boundary->id,
+                ]
+            ));
+        }
+        // Less than a full chunk is left.
+        $DB->throttled_write(fn() => $DB->delete_records_select($table, 'timemodified < :histlifetime', $params));
     }
 }
