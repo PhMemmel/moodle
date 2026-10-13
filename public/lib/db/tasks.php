@@ -143,8 +143,8 @@ $tasks = array(
     array(
         'classname' => 'core\task\grade_history_cleanup_task',
         'blocking' => 0,
-        'minute' => '*',
-        'hour' => '0',
+        'minute' => '47',
+        'hour' => '*',
         'day' => '*',
         'dayofweek' => '*',
         'month' => '*'
