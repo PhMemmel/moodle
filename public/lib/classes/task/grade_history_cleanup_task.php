@@ -31,6 +31,8 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class grade_history_cleanup_task extends scheduled_task {
+    /** @var int Maximum number of records deleted per query, to keep transactions (and cluster writesets) small. */
+    const DELETE_CHUNK_SIZE = 500;
 
     /**
      * Get a descriptive name for this task (shown to admins).
@@ -45,10 +47,10 @@ class grade_history_cleanup_task extends scheduled_task {
      * Cleanup history tables.
      */
     public function execute() {
-        global $CFG, $DB;
+        global $CFG;
 
         if (!empty($CFG->gradehistorylifetime)) {
-            $now = time();
+            $now = \core\di::get(\core\clock::class)->time();
             $histlifetime = $now - ($CFG->gradehistorylifetime * DAYSECS);
             $tables = [
                 'grade_outcomes_history',
@@ -58,10 +60,43 @@ class grade_history_cleanup_task extends scheduled_task {
                 'scale_history'
             ];
             foreach ($tables as $table) {
-                if ($DB->delete_records_select($table, "timemodified < ?", [$histlifetime])) {
-                    mtrace("    Deleted old grade history records from '$table'");
-                }
+                $deleted = $this->delete_old_records_in_chunks($table, $histlifetime);
+                mtrace("Deleted {$deleted} old grade history records from '$table'");
             }
         }
+    }
+
+    /**
+     * Deletes all records older than the given timestamp from the given table in chunks.
+     *
+     * Deleting everything in a single statement creates one huge transaction which may block
+     * the database (e.g. flow control in Galera clusters) for a long time, so we delete chunk by chunk.
+     *
+     * @param string $table The history table to clean up.
+     * @param int $histlifetime Records with timemodified before this timestamp will be deleted.
+     * @return int Number of deleted records.
+     */
+    protected function delete_old_records_in_chunks(string $table, int $histlifetime): int {
+        global $DB;
+
+        $deleted = 0;
+        do {
+            $ids = array_keys($DB->get_records_select(
+                $table,
+                'timemodified < :histlifetime',
+                ['histlifetime' => $histlifetime],
+                '',
+                'id',
+                0,
+                self::DELETE_CHUNK_SIZE
+            ));
+            if (empty($ids)) {
+                break;
+            }
+            $DB->delete_records_list($table, 'id', $ids);
+            $deleted += count($ids);
+        } while (count($ids) === self::DELETE_CHUNK_SIZE);
+
+        return $deleted;
     }
 }
