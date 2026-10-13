@@ -25,6 +25,7 @@ namespace core_backup\privacy;
 
 use core_backup\privacy\provider;
 use core_privacy\local\request\approved_userlist;
+use PHPUnit\Framework\Attributes\CoversClass;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -34,6 +35,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2018 Mark Nelson <markn@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(provider::class)]
 final class provider_test extends \core_privacy\tests\provider_testcase {
 
     /**
@@ -162,6 +164,47 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
         $bc2 = array_shift($data);
         $this->assertEquals('backup', $bc2['operation']);
+    }
+
+    /**
+     * Test that deleting data also removes the stored serialised controllers.
+     */
+    public function test_delete_data_for_all_users_in_context_removes_controller_files(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id]);
+
+        $bc = new \backup_controller(
+            \backup::TYPE_1ACTIVITY,
+            $page->cmid,
+            \backup::FORMAT_MOODLE,
+            \backup::INTERACTIVE_NO,
+            \backup::MODE_GENERAL,
+            get_admin()->id,
+        );
+        $id = $DB->get_field('backup_controllers', 'id', ['backupid' => $bc->get_backupid()], MUST_EXIST);
+        $bc->destroy();
+        $syscontextid = \context_system::instance()->id;
+        $this->assertFalse(get_file_storage()->is_area_empty(
+            $syscontextid,
+            'backup',
+            \backup_controller_dbops::CONTROLLER_FILEAREA,
+            $id,
+        ));
+
+        provider::delete_data_for_all_users_in_context(\context_module::instance($page->cmid));
+
+        $this->assertFalse($DB->record_exists('backup_controllers', ['id' => $id]));
+        $this->assertTrue(get_file_storage()->is_area_empty(
+            $syscontextid,
+            'backup',
+            \backup_controller_dbops::CONTROLLER_FILEAREA,
+            $id,
+        ));
     }
 
     /**

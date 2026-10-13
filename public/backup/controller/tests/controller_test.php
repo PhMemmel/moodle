@@ -25,6 +25,7 @@ namespace core_backup;
 
 use backup;
 use backup_controller;
+use PHPUnit\Framework\Attributes\CoversClass;
 use restore_controller;
 
 defined('MOODLE_INTERNAL') || die();
@@ -42,6 +43,8 @@ require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
  * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(\backup_controller_dbops::class)]
+#[CoversClass(\restore_controller_dbops::class)]
 final class controller_test extends \advanced_testcase {
 
     protected $moduleid;  // course_modules id used for testing
@@ -119,6 +122,117 @@ final class controller_test extends \advanced_testcase {
         $recid = $bc->save_controller();
         $newbc = mock_backup_controller::load_controller($bc->get_backupid());
         $this->assertTrue($newbc instanceof backup_controller); // This means checksum and load worked ok
+    }
+
+    /**
+     * Test that the serialised backup controller is kept in the file storage.
+     */
+    public function test_backup_controller_stored_in_file_storage(): void {
+        global $DB;
+
+        // A non interactive controller is saved when reaching the awaiting status.
+        $bc = new mock_backup_controller(
+            backup::TYPE_1ACTIVITY,
+            $this->moduleid,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_GENERAL,
+            $this->userid,
+        );
+        $rec = $DB->get_record('backup_controllers', ['backupid' => $bc->get_backupid()], '*', MUST_EXIST);
+        $this->assertSame(\backup_controller_dbops::CONTROLLER_IN_FILE, $rec->controller);
+        $this->assertFalse(get_file_storage()->is_area_empty(
+            \context_system::instance()->id,
+            'backup',
+            \backup_controller_dbops::CONTROLLER_FILEAREA,
+            $rec->id,
+        ));
+
+        // Saving again replaces the stored file.
+        $bc->save_controller();
+        $files = get_file_storage()->get_area_files(
+            \context_system::instance()->id,
+            'backup',
+            \backup_controller_dbops::CONTROLLER_FILEAREA,
+            $rec->id,
+            'id',
+            false,
+        );
+        $this->assertCount(1, $files);
+
+        $newbc = mock_backup_controller::load_controller($bc->get_backupid());
+        $this->assertInstanceOf(backup_controller::class, $newbc);
+        $this->assertEquals($bc->get_backupid(), $newbc->get_backupid());
+
+        // Cleaning the controller removes the stored file.
+        $bc->set_status(backup::STATUS_FINISHED_OK);
+        $this->assertSame('', $DB->get_field('backup_controllers', 'controller', ['id' => $rec->id]));
+        $this->assertTrue(get_file_storage()->is_area_empty(
+            \context_system::instance()->id,
+            'backup',
+            \backup_controller_dbops::CONTROLLER_FILEAREA,
+            $rec->id,
+        ));
+    }
+
+    /**
+     * Test that controllers stored base64 encoded in the controller column can be loaded.
+     */
+    public function test_backup_controller_load_base64_record(): void {
+        global $DB;
+
+        $bc = new mock_backup_controller(
+            backup::TYPE_1ACTIVITY,
+            $this->moduleid,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_GENERAL,
+            $this->userid,
+        );
+        $rec = $DB->get_record('backup_controllers', ['backupid' => $bc->get_backupid()], '*', MUST_EXIST);
+
+        // Move the controller from the file storage into the controller column.
+        $encoded = base64_encode(\backup_controller_dbops::get_controller_data($rec));
+        \backup_controller_dbops::delete_controller_data($rec->id);
+        $DB->set_field('backup_controllers', 'controller', $encoded, ['id' => $rec->id]);
+
+        $newbc = mock_backup_controller::load_controller($bc->get_backupid());
+        $this->assertInstanceOf(backup_controller::class, $newbc);
+        $this->assertEquals($bc->get_backupid(), $newbc->get_backupid());
+    }
+
+    /**
+     * Test that the serialised restore controller is kept in the file storage.
+     */
+    public function test_restore_controller_stored_in_file_storage(): void {
+        global $DB;
+
+        $rc = new \restore_controller(
+            1729,
+            $this->courseid,
+            backup::INTERACTIVE_NO,
+            backup::MODE_COPY,
+            $this->userid,
+            backup::TARGET_NEW_COURSE,
+            null,
+            backup::RELEASESESSION_NO,
+            (object)['some' => 'copydata'],
+        );
+        $rc->save_controller();
+        $rec = $DB->get_record('backup_controllers', ['backupid' => $rc->get_restoreid()], '*', MUST_EXIST);
+        $this->assertSame(\backup_controller_dbops::CONTROLLER_IN_FILE, $rec->controller);
+
+        $newrc = restore_controller::load_controller($rc->get_restoreid());
+        $this->assertInstanceOf(restore_controller::class, $newrc);
+        $this->assertEquals($rc->get_copy(), $newrc->get_copy());
+
+        $rc->save_controller(false, true);
+        $this->assertTrue(get_file_storage()->is_area_empty(
+            \context_system::instance()->id,
+            'backup',
+            \backup_controller_dbops::CONTROLLER_FILEAREA,
+            $rec->id,
+        ));
     }
 
     public function test_backup_controller_include_files(): void {

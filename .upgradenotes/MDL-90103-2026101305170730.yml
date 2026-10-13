@@ -1,0 +1,17 @@
+issueNumber: MDL-90103
+notes:
+  core_backup:
+    - message: >-
+        The serialised backup and restore controllers are no longer stored in
+        the `controller` column of the `backup_controllers` table. They are now
+        stored compressed in the file storage (system context, component
+        `backup`, file area `controller`, item id `backup_controllers.id`). The
+        column only contains the marker
+        `backup_controller_dbops::CONTROLLER_IN_FILE` instead. Code which
+        directly reads that column must use the new method
+        `backup_controller_dbops::get_controller_data()` instead. The new
+        methods `backup_controller_dbops::store_controller_data()` and
+        `backup_controller_dbops::delete_controller_data()` can be used to write
+        and delete the stored controller. Code which deletes records from the
+        `backup_controllers` table must also delete the stored controller.
+      type: changed

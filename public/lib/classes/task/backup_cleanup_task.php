@@ -71,6 +71,7 @@ class backup_cleanup_task extends scheduled_task {
             if ($count === 0) {
                 // Looks like there is no adhoc task, so we can delete logs and controllers for this backupid.
                 $DB->delete_records('backup_logs', array('backupid' => $record->backupid));
+                \backup_controller_dbops::delete_controller_data($record->id);
                 $DB->delete_records('backup_controllers', array('backupid' => $record->backupid));
             }
         }

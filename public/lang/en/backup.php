@@ -352,6 +352,7 @@ $string['privacy:metadata:backup_controllers:operation'] = 'The operation that w
 $string['privacy:metadata:backup_controllers:timecreated'] = 'The time when the action was created';
 $string['privacy:metadata:backup_controllers:timemodified'] = 'The time when the action was modified';
 $string['privacy:metadata:backup_controllers:type'] = 'The type of the item being operated on, eg. activity.';
+$string['privacy:metadata:core_files'] = 'The backup and restore operations store their state, which may contain user related settings, in the file storage.';
 $string['qcategory2coursefallback'] = 'The questions category "{$a->name}", originally at system|course|course_category context in backup file, will be created at a question bank module context by restore';
 $string['qcategorycannotberestored'] = 'The questions category "{$a->name}" cannot be created by restore';
 $string['question2coursefallback'] = 'The questions category "{$a->name}", originally at system|course|course_category in backup file, will be created at a question bank module context by restore';

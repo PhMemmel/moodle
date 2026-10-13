@@ -33,6 +33,16 @@
 abstract class backup_controller_dbops extends backup_dbops {
 
     /**
+     * Value stored in backup_controllers.controller when the serialised controller is kept in the file storage.
+     */
+    const CONTROLLER_IN_FILE = 'file';
+
+    /**
+     * File area (component 'backup', system context) used to store the serialised controllers.
+     */
+    const CONTROLLER_FILEAREA = 'controller';
+
+    /**
      * @var string Backup id for cached backup_includes_files result.
      */
     protected static $includesfilescachebackupid;
@@ -80,14 +90,15 @@ abstract class backup_controller_dbops extends backup_dbops {
         $rec->execution    = $controller->get_execution();
         $rec->executiontime= $controller->get_executiontime();
         $rec->checksum     = $checksum;
-        // Serialize information
+        // Serialized information is kept in the file storage, the record only gets a marker.
         if ($includeobj) {
-            $rec->controller = base64_encode(serialize($controller));
+            $rec->controller = self::CONTROLLER_IN_FILE;
         } else if ($cleanobj) {
             $rec->controller = '';
         }
         // Send it to DB
-        if ($recexists = $DB->get_record('backup_controllers', array('backupid' => $rec->backupid))) {
+        $transaction = $DB->start_delegated_transaction();
+        if ($recexists = $DB->get_record('backup_controllers', ['backupid' => $rec->backupid], 'id')) {
             $rec->id = $recexists->id;
             $rec->timemodified = time();
             $DB->update_record('backup_controllers', $rec);
@@ -96,6 +107,12 @@ abstract class backup_controller_dbops extends backup_dbops {
             $rec->timemodified = 0;
             $rec->id = $DB->insert_record('backup_controllers', $rec);
         }
+        if ($includeobj) {
+            self::store_controller_data($rec->id, serialize($controller));
+        } else if ($cleanobj) {
+            self::delete_controller_data($rec->id);
+        }
+        $transaction->allow_commit();
         return $rec->id;
     }
 
@@ -104,7 +121,7 @@ abstract class backup_controller_dbops extends backup_dbops {
         if (! $controllerrec = $DB->get_record('backup_controllers', array('backupid' => $backupid))) {
             throw new backup_dbops_exception('backup_controller_dbops_nonexisting');
         }
-        $controller = unserialize(base64_decode($controllerrec->controller));
+        $controller = unserialize(self::get_controller_data($controllerrec));
         if (!is_object($controller)) {
             // The controller field of the table did not contain a serialized object.
             // It is made empty after it has been used successfully, it is likely that
@@ -116,6 +133,71 @@ abstract class backup_controller_dbops extends backup_dbops {
             throw new backup_dbops_exception('backup_controller_dbops_loading_checksum_mismatch');
         }
         return $controller;
+    }
+
+    /**
+     * Store the serialised (backup or restore) controller in the file storage.
+     *
+     * @param int $id The id of the backup_controllers record.
+     * @param string $data The serialised controller.
+     */
+    public static function store_controller_data(int $id, string $data): void {
+        $fs = get_file_storage();
+        $filerecord = [
+            'contextid' => context_system::instance()->id,
+            'component' => 'backup',
+            'filearea' => self::CONTROLLER_FILEAREA,
+            'itemid' => $id,
+            'filepath' => '/',
+            'filename' => 'controller',
+        ];
+        $file = $fs->get_file(
+            $filerecord['contextid'],
+            $filerecord['component'],
+            $filerecord['filearea'],
+            $filerecord['itemid'],
+            $filerecord['filepath'],
+            $filerecord['filename'],
+        );
+        if ($file) {
+            $file->delete();
+        }
+        $fs->create_file_from_string($filerecord, gzcompress($data));
+    }
+
+    /**
+     * Get the serialised (backup or restore) controller of a backup_controllers record.
+     *
+     * @param stdClass $controllerrec The backup_controllers record.
+     * @return string The serialised controller, empty string if not available.
+     */
+    public static function get_controller_data(stdClass $controllerrec): string {
+        if ($controllerrec->controller !== self::CONTROLLER_IN_FILE) {
+            // Without the marker, the record contains the base64 encoded controller itself.
+            return base64_decode($controllerrec->controller);
+        }
+        $file = get_file_storage()->get_file(
+            context_system::instance()->id,
+            'backup',
+            self::CONTROLLER_FILEAREA,
+            $controllerrec->id,
+            '/',
+            'controller',
+        );
+        if (!$file) {
+            return '';
+        }
+        $data = gzuncompress($file->get_content());
+        return $data === false ? '' : $data;
+    }
+
+    /**
+     * Delete the stored serialised controller of a backup_controllers record.
+     *
+     * @param int $id The id of the backup_controllers record.
+     */
+    public static function delete_controller_data(int $id): void {
+        get_file_storage()->delete_area_files(context_system::instance()->id, 'backup', self::CONTROLLER_FILEAREA, $id);
     }
 
     public static function create_backup_ids_temp_table($backupid) {

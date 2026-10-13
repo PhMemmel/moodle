@@ -74,6 +74,8 @@ class provider implements
             'privacy:metadata:backup_controllers'
         );
 
+        $items->link_subsystem('core_files', 'privacy:metadata:core_files');
+
         return $items;
     }
 
@@ -228,15 +230,13 @@ class provider implements
      * @param \context $context A user context.
      */
     public static function delete_data_for_all_users_in_context(\context $context) {
-        global $DB;
-
         if ($context instanceof \context_course) {
             $sectionsql = "itemid IN (SELECT id FROM {course_sections} WHERE course = ?) AND type = ?";
-            $DB->delete_records_select('backup_controllers', $sectionsql, [$context->instanceid, \backup::TYPE_1SECTION]);
-            $DB->delete_records('backup_controllers', ['itemid' => $context->instanceid, 'type' => \backup::TYPE_1COURSE]);
+            self::delete_backup_controllers($sectionsql, [$context->instanceid, \backup::TYPE_1SECTION]);
+            self::delete_backup_controllers('itemid = ? AND type = ?', [$context->instanceid, \backup::TYPE_1COURSE]);
         }
         if ($context instanceof \context_module) {
-            $DB->delete_records('backup_controllers', ['itemid' => $context->instanceid, 'type' => \backup::TYPE_1ACTIVITY]);
+            self::delete_backup_controllers('itemid = ? AND type = ?', [$context->instanceid, \backup::TYPE_1ACTIVITY]);
         }
         return;
     }
@@ -262,14 +262,14 @@ class provider implements
             $params['itemid'] = $context->instanceid;
             $params['type'] = \backup::TYPE_1COURSE;
 
-            $DB->delete_records_select('backup_controllers', $select, $params);
+            self::delete_backup_controllers($select, $params);
 
             $params = $userparams;
             $params['course'] = $context->instanceid;
             $params['type'] = \backup::TYPE_1SECTION;
             $sectionsql = "itemid IN (SELECT id FROM {course_sections} WHERE course = :course)";
             $select = $sectionsql . " AND userid {$usersql} AND type = :type";
-            $DB->delete_records_select('backup_controllers', $select, $params);
+            self::delete_backup_controllers($select, $params);
         }
         if ($context instanceof \context_module) {
             list($usersql, $userparams) = $DB->get_in_or_equal($userlist->get_userids(), SQL_PARAMS_NAMED);
@@ -281,7 +281,7 @@ class provider implements
             // Delete activity backup data.
             $select = "itemid = :itemid AND type = :type AND userid {$usersql}";
             $params = ['itemid' => $context->instanceid, 'type' => 'activity'] + $userparams;
-            $DB->delete_records_select('backup_controllers', $select, $params);
+            self::delete_backup_controllers($select, $params);
         }
     }
 
@@ -308,7 +308,7 @@ class provider implements
                     'type' => \backup::TYPE_1COURSE
                 ];
 
-                $DB->delete_records_select('backup_controllers', $select, $params);
+                self::delete_backup_controllers($select, $params);
 
                 $params = [
                     'userid' => $userid,
@@ -317,7 +317,7 @@ class provider implements
                 ];
                 $sectionsql = "itemid IN (SELECT id FROM {course_sections} WHERE course = :course)";
                 $select = $sectionsql . " AND userid = :userid AND type = :type";
-                $DB->delete_records_select('backup_controllers', $select, $params);
+                self::delete_backup_controllers($select, $params);
             }
             if ($context instanceof \context_module) {
                 list($usersql, $userparams) = $DB->get_in_or_equal($userlist->get_userids(), SQL_PARAMS_NAMED);
@@ -328,11 +328,27 @@ class provider implements
                     'type' => \backup::TYPE_1ACTIVITY
                 ];
 
-                $DB->delete_records_select('backup_controllers', $select, $params);
+                self::delete_backup_controllers($select, $params);
             }
 
         }
     }
+
+    /**
+     * Delete backup_controllers records together with their stored serialised controllers.
+     *
+     * @param string $select The SQL select fragment identifying the records.
+     * @param array $params The parameters for the select fragment.
+     */
+    protected static function delete_backup_controllers(string $select, array $params): void {
+        global $DB;
+
+        foreach ($DB->get_fieldset_select('backup_controllers', 'id', $select, $params) as $id) {
+            \backup_controller_dbops::delete_controller_data($id);
+        }
+        $DB->delete_records_select('backup_controllers', $select, $params);
+    }
+
 
     /**
      * Loop and export from a recordset.

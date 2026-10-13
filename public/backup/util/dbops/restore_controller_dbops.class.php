@@ -70,14 +70,15 @@ abstract class restore_controller_dbops extends restore_dbops {
         $rec->execution    = $controller->get_execution();
         $rec->executiontime= $controller->get_executiontime();
         $rec->checksum     = $checksum;
-        // Serialize information
+        // Serialized information is kept in the file storage, the record only gets a marker.
         if ($includeobj) {
-            $rec->controller = base64_encode(serialize($controller));
+            $rec->controller = backup_controller_dbops::CONTROLLER_IN_FILE;
         } else if ($cleanobj) {
             $rec->controller = '';
         }
         // Send it to DB
-        if ($recexists = $DB->get_record('backup_controllers', array('backupid' => $rec->backupid))) {
+        $transaction = $DB->start_delegated_transaction();
+        if ($recexists = $DB->get_record('backup_controllers', ['backupid' => $rec->backupid], 'id')) {
             $rec->id = $recexists->id;
             $rec->timemodified = time();
             $DB->update_record('backup_controllers', $rec);
@@ -86,6 +87,12 @@ abstract class restore_controller_dbops extends restore_dbops {
             $rec->timemodified = 0;
             $rec->id = $DB->insert_record('backup_controllers', $rec);
         }
+        if ($includeobj) {
+            backup_controller_dbops::store_controller_data($rec->id, serialize($controller));
+        } else if ($cleanobj) {
+            backup_controller_dbops::delete_controller_data($rec->id);
+        }
+        $transaction->allow_commit();
         return $rec->id;
     }
 
@@ -94,9 +101,9 @@ abstract class restore_controller_dbops extends restore_dbops {
         if (! $controllerrec = $DB->get_record('backup_controllers', array('backupid' => $restoreid))) {
             throw new backup_dbops_exception('restore_controller_dbops_nonexisting');
         }
-        $controller = unserialize(base64_decode($controllerrec->controller));
+        $controller = unserialize(backup_controller_dbops::get_controller_data($controllerrec));
         if (!is_object($controller)) {
-            // The controller field of the table did not contain a serialized object.
+            // The controller is not a serialized object.
             // It is made empty after it has been used successfully, it is likely that
             // the user has pressed the browser back button at some point.
             throw new backup_dbops_exception('restore_controller_dbops_loading_invalid_controller');
