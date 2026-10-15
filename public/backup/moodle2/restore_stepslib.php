@@ -5662,18 +5662,34 @@ class restore_create_categories_and_questions extends restore_structure_step {
             }
         }
 
-        // Now, recode all the created question->parent fields
-        $qs = $DB->get_records('backup_ids_temp', array(
-                  'backupid' => $this->get_restoreid(),
-                  'itemname' => 'question_created'));
-        foreach ($qs as $q) {
-            $dbq = $DB->get_record('question', array('id' => $q->newitemid));
-            // Get new parent (mapped or created, so we look in question mappings)
-            if ($newparent = $DB->get_field('backup_ids_temp', 'newitemid', array(
-                                 'backupid' => $this->get_restoreid(),
-                                 'itemname' => 'question',
-                                 'itemid'   => $dbq->parent))) {
-                $DB->set_field('question', 'parent', $newparent, array('id' => $dbq->id));
+        // Now, recode all the created question->parent fields.
+        $sql = "SELECT q.id, q.parent
+                  FROM {question} q
+                  JOIN {backup_ids_temp} bi ON bi.newitemid = q.id
+                 WHERE bi.backupid = :backupid
+                   AND bi.itemname = :itemname
+                   AND q.parent <> 0";
+        $oldparents = $DB->get_records_sql_menu($sql, ['backupid' => $this->get_restoreid(), 'itemname' => 'question_created']);
+        // Get new parents (mapped or created, so we look in question mappings).
+        $newparents = [];
+        foreach (array_chunk(array_unique($oldparents), 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+            $params['backupid'] = $this->get_restoreid();
+            $params['itemname'] = 'question';
+            $newparents += $DB->get_records_select_menu('backup_ids_temp',
+                "backupid = :backupid AND itemname = :itemname AND itemid $insql", $params, '', 'itemid, newitemid');
+        }
+        // Update the questions grouped by their new parent, so there is one query per parent instead of one per question.
+        $questionsbyparent = [];
+        foreach ($oldparents as $questionid => $oldparent) {
+            if (!empty($newparents[$oldparent])) {
+                $questionsbyparent[$newparents[$oldparent]][] = $questionid;
+            }
+        }
+        foreach ($questionsbyparent as $newparent => $questionids) {
+            foreach (array_chunk($questionids, 1000) as $chunk) {
+                [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+                $DB->set_field_select('question', 'parent', $newparent, "id $insql", $params);
             }
         }
 
