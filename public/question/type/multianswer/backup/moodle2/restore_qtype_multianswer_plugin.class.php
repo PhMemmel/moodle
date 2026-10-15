@@ -98,6 +98,7 @@ class restore_qtype_multianswer_plugin extends restore_qtype_plugin {
                  WHERE bi.backupid = ?
                    AND bi.itemname = 'question_created'",
                 array($this->get_restoreid()));
+        $wrappedids = [];
         foreach ($rs as $rec) {
             $sequencearr = preg_split('/,/', $rec->sequence, -1, PREG_SPLIT_NO_EMPTY);
             if (substr_count($rec->sequence, ',') + 1 != count($sequencearr)) {
@@ -111,26 +112,32 @@ class restore_qtype_multianswer_plugin extends restore_qtype_plugin {
             $DB->set_field('question_multianswer', 'sequence', $sequence,
                     array('id' => $rec->id));
             if (!empty($sequence)) {
-                // Get relevant data indexed by positionkey from the multianswers table.
-                $wrappedquestions = $DB->get_records_list('question', 'id',
-                    explode(',', $sequence), 'id ASC');
-                foreach ($wrappedquestions as $wrapped) {
-                    if ($wrapped->qtype == 'multichoice') {
-                        question_bank::get_qtype($wrapped->qtype)->get_question_options($wrapped);
-                        if (isset($wrapped->options->shuffleanswers)) {
-                            preg_match('/'.ANSWER_REGEX.'/s', $wrapped->questiontext, $answerregs);
-                            if (isset($answerregs[ANSWER_REGEX_ANSWER_TYPE_MULTICHOICE]) &&
-                                    $answerregs[ANSWER_REGEX_ANSWER_TYPE_MULTICHOICE] !== '') {
-                                $wrapped->options->shuffleanswers = 0;
-                                $DB->set_field_select('qtype_multichoice_options', 'shuffleanswers', '0', "id =:select",
-                                    array('select' => $wrapped->options->id) );
-                            }
-                        }
-                    }
-                }
+                $wrappedids = array_merge($wrappedids, explode(',', $sequence));
             }
         }
         $rs->close();
+
+        // Multichoice subquestions with an inline multichoice answer type must not shuffle their answers.
+        $noshuffleids = [];
+        foreach (array_chunk(array_unique($wrappedids), 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+            $params['qtype'] = 'multichoice';
+            $wrappedquestions = $DB->get_records_select('question', "id $insql AND qtype = :qtype", $params, '',
+                'id, questiontext');
+            foreach ($wrappedquestions as $wrapped) {
+                preg_match('/'.ANSWER_REGEX.'/s', $wrapped->questiontext, $answerregs);
+                if (isset($answerregs[ANSWER_REGEX_ANSWER_TYPE_MULTICHOICE]) &&
+                        $answerregs[ANSWER_REGEX_ANSWER_TYPE_MULTICHOICE] !== '') {
+                    $noshuffleids[] = $wrapped->id;
+                }
+            }
+        }
+        // Update all of them at once, but only where the value actually changes.
+        foreach (array_chunk($noshuffleids, 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+            $DB->set_field_select('qtype_multichoice_options', 'shuffleanswers', 0,
+                "questionid $insql AND shuffleanswers <> 0", $params);
+        }
     }
 
     public function recode_response($questionid, $sequencenumber, array $response) {
