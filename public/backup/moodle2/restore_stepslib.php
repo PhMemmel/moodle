@@ -5553,8 +5553,9 @@ class restore_create_categories_and_questions extends restore_structure_step {
         if ($questioncreated) {
             // Adjust some columns
             $data->questionid = $newquestionid;
-            // Insert record
-            $newitemid = $DB->insert_record('question_hints', $data);
+            // Queue the record, the hints are inserted in bulk and their mappings are stored afterwards.
+            $this->queue_insert_record('question_hints', $data, 'question_hint', $oldid, 'questionid');
+            return;
 
         // The question existed, we need to map the existing question_hints
         } else {

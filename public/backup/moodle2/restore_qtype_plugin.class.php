@@ -183,8 +183,9 @@ abstract class restore_qtype_plugin extends restore_plugin {
             // Adjust some columns
             $data->question = $newquestionid;
             $data->answer = $data->answertext;
-            // Insert record
-            $newitemid = $DB->insert_record('question_answers', $data);
+            // Queue the record, the answers are inserted in bulk and their mappings are stored afterwards.
+            $this->step->queue_insert_record('question_answers', $data, 'question_answer', $oldid, 'question');
+            return;
 
         // The question existed, we need to map the existing question_answers
         } else {

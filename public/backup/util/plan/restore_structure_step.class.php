@@ -46,6 +46,12 @@ abstract class restore_structure_step extends restore_step {
     /** @var stdClass[] Records queued by {@see self::queue_insert_record()}, in queue order. */
     private array $insertqueue = [];
 
+    /** @var bool[] Mapping item names (as keys) of queued records whose mapping has not been stored yet. */
+    private array $insertqueuemappings = [];
+
+    /** @var bool[][] Ids (as keys) per table that have already been assigned to the mapping of a queued record. */
+    private array $insertqueueassignedids = [];
+
     const SKIP_ALL_CHILDREN = -991399; // To instruct the dispatcher about to ignore
                                        // all children below path processor returning it
 
@@ -225,6 +231,10 @@ abstract class restore_structure_step extends restore_step {
      * Return the complete mapping from the given itemname, itemid
      */
     public function get_mapping($itemname, $oldid) {
+        if (isset($this->insertqueuemappings[$itemname])) {
+            // The mapping may belong to a queued record, so write the queue first.
+            $this->flush_insert_queue();
+        }
         return restore_dbops::get_backup_ids_record($this->get_restoreid(), $itemname, $oldid);
     }
 
@@ -232,14 +242,31 @@ abstract class restore_structure_step extends restore_step {
      * Queue a record to be inserted in bulk together with other queued records.
      *
      * Use this instead of $DB->insert_record() to reduce the number of write queries. The queue is written when it is
-     * full and before the after_execute methods are launched. So nothing must read queued records from the table before.
+     * full, before a mapping of a queued $mappingitemname is read via {@see self::get_mapping()} and before the
+     * after_execute methods are launched. So nothing must read queued records from the table before.
+     *
+     * If $mappingitemname is given, the new id is identified after the bulk insert by comparing the content of the
+     * records sharing the same value in $parentfield, and the mapping from $oldid to the new id is stored.
      *
      * @param string $table The table to insert the record into.
      * @param stdClass|array $record The record to insert, fields which are no columns of the table are ignored.
+     * @param string|null $mappingitemname The item name to store the mapping of the new id with, null for no mapping.
+     * @param int|null $oldid The old id of the record, required if $mappingitemname is given.
+     * @param string|null $parentfield Field identifying records only created by this restore (e.g. the new question id),
+     *     required if $mappingitemname is given.
      */
-    public function queue_insert_record(string $table, stdClass|array $record): void {
+    public function queue_insert_record(
+        string $table,
+        stdClass|array $record,
+        ?string $mappingitemname = null,
+        ?int $oldid = null,
+        ?string $parentfield = null,
+    ): void {
         global $DB;
 
+        if ($mappingitemname !== null && ($oldid === null || $parentfield === null)) {
+            throw new coding_exception('Queued records with a mapping need an old id and a parent field.');
+        }
         $record = array_intersect_key((array) $record, $DB->get_columns($table));
         unset($record['id']);
         // All records of one bulk insert need the same structure, so use a defined field order.
@@ -247,14 +274,20 @@ abstract class restore_structure_step extends restore_step {
         $this->insertqueue[] = (object) [
             'table' => $table,
             'record' => $record,
+            'mappingitemname' => $mappingitemname,
+            'oldid' => $oldid,
+            'parentfield' => $parentfield,
         ];
+        if ($mappingitemname !== null) {
+            $this->insertqueuemappings[$mappingitemname] = true;
+        }
         if (count($this->insertqueue) >= $this->insertqueuelimit) {
             $this->flush_insert_queue();
         }
     }
 
     /**
-     * Write all queued records with bulk inserts.
+     * Write all queued records with bulk inserts and store the mappings of their new ids.
      */
     public function flush_insert_queue(): void {
         global $DB;
@@ -264,11 +297,13 @@ abstract class restore_structure_step extends restore_step {
         }
         $queue = $this->insertqueue;
         $this->insertqueue = [];
+        $this->insertqueuemappings = [];
 
         // Consecutive records of the same table and structure are written with one bulk insert, keeping their order.
         $batch = [];
         $batchkey = null;
         $batchtable = null;
+        $mappeditems = [];
         foreach ($queue as $item) {
             $key = $item->table . ':' . implode(',', array_keys($item->record));
             if ($key !== $batchkey && $batch) {
@@ -278,8 +313,83 @@ abstract class restore_structure_step extends restore_step {
             $batchkey = $key;
             $batchtable = $item->table;
             $batch[] = $item->record;
+            if ($item->mappingitemname !== null) {
+                $mappeditems[$item->table . ':' . $item->parentfield][] = $item;
+            }
         }
         $DB->insert_records($batchtable, $batch);
+
+        foreach ($mappeditems as $items) {
+            $this->store_queued_record_mappings($items);
+        }
+    }
+
+    /**
+     * Identify the new ids of bulk inserted records by their content and store their mappings.
+     *
+     * @param stdClass[] $items Queued records of the same table and parent field, in insert order.
+     */
+    private function store_queued_record_mappings(array $items): void {
+        global $DB;
+
+        $table = reset($items)->table;
+        $parentfield = reset($items)->parentfield;
+        $parentids = array_unique(array_map(fn($item) => $item->record[$parentfield], $items));
+
+        // Load the candidate rows ordered by id, so normally the first unassigned row of a parent matches.
+        $rowsbyparent = [];
+        foreach (array_chunk($parentids, 500) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+            $rs = $DB->get_recordset_select($table, "$parentfield $insql", $params, 'id');
+            foreach ($rs as $row) {
+                if (!isset($this->insertqueueassignedids[$table][$row->id])) {
+                    $rowsbyparent[$row->$parentfield][$row->id] = $row;
+                }
+            }
+            $rs->close();
+        }
+
+        foreach ($items as $item) {
+            $parentid = $item->record[$parentfield];
+            $newid = null;
+            foreach ($rowsbyparent[$parentid] ?? [] as $row) {
+                if (self::queued_record_matches($item->record, $row)) {
+                    $newid = $row->id;
+                    break;
+                }
+            }
+            if ($newid === null) {
+                throw new restore_step_exception(
+                    'queued_record_not_found',
+                    (object) ['table' => $table, 'oldid' => $item->oldid],
+                );
+            }
+            unset($rowsbyparent[$parentid][$newid]);
+            $this->insertqueueassignedids[$table][$newid] = true;
+            $this->set_mapping($item->mappingitemname, $item->oldid, $newid);
+        }
+    }
+
+    /**
+     * Check whether a row read from the database contains the values of a queued record.
+     *
+     * @param array $record The queued record.
+     * @param stdClass $row The row from the database.
+     * @return bool True if all values of the record match.
+     */
+    private static function queued_record_matches(array $record, stdClass $row): bool {
+        foreach ($record as $field => $value) {
+            $dbvalue = $row->$field;
+            if (is_numeric($dbvalue) && (is_numeric($value) || is_bool($value) || $value === '' || $value === null)) {
+                // Numbers may have been normalised or rounded by the database.
+                if (abs((float) $dbvalue - (float) $value) > 0.000001) {
+                    return false;
+                }
+            } else if ((string) $dbvalue !== (string) $value) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

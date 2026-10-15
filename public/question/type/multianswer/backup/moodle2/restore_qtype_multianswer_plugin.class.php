@@ -55,8 +55,6 @@ class restore_qtype_multianswer_plugin extends restore_qtype_plugin {
      * Process the qtype/multianswer element
      */
     public function process_multianswer($data) {
-        global $DB;
-
         $data = (object)$data;
         $oldid = $data->id;
 
@@ -74,10 +72,9 @@ class restore_qtype_multianswer_plugin extends restore_qtype_plugin {
             // recoding them here (because some questions can be missing yet). Instead
             // we'll perform the recode in the {@link after_execute} method of the plugin
             // that gets executed once all questions have been created.
-            // Insert record.
-            $newitemid = $DB->insert_record('question_multianswer', $data);
-            // Create mapping (need it for after_execute recode of sequence).
-            $this->set_mapping('question_multianswer', $oldid, $newitemid);
+            // Queue the record to be inserted in bulk and create the mapping afterwards
+            // (need it for after_execute recode of sequence).
+            $this->step->queue_insert_record('question_multianswer', $data, 'question_multianswer', $oldid, 'question');
         }
     }
 

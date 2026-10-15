@@ -34,6 +34,9 @@ defined('MOODLE_INTERNAL') || die();
  */
 class restore_qtype_multichoice_plugin extends restore_qtype_plugin {
 
+    /** @var bool[] New question ids (as keys) whose options have already been queued for insertion. */
+    private array $queuedoptions = [];
+
     /**
      * Returns the paths to be handled by the plugin at question level
      */
@@ -57,8 +60,6 @@ class restore_qtype_multichoice_plugin extends restore_qtype_plugin {
      * Process the qtype/multichoice element
      */
     public function process_multichoice($data) {
-        global $DB;
-
         $data = (object)$data;
         $oldid = $data->id;
 
@@ -73,10 +74,12 @@ class restore_qtype_multichoice_plugin extends restore_qtype_plugin {
             $data->questionid = $newquestionid;
 
             // It is possible for old backup files to contain unique key violations.
-            // We need to check to avoid that.
-            if (!$DB->record_exists('qtype_multichoice_options', array('questionid' => $data->questionid))) {
-                $newitemid = $DB->insert_record('qtype_multichoice_options', $data);
-                $this->set_mapping('qtype_multichoice_options', $oldid, $newitemid);
+            // We need to check to avoid that. The question has just been created, so only queued options can exist.
+            if (!isset($this->queuedoptions[$data->questionid])) {
+                $this->queuedoptions[$data->questionid] = true;
+                // Queue the record, the options are inserted in bulk and their mappings are stored afterwards.
+                $this->step->queue_insert_record('qtype_multichoice_options', $data, 'qtype_multichoice_options', $oldid,
+                    'questionid');
             }
         }
     }
