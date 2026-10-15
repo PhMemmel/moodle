@@ -40,6 +40,12 @@ abstract class restore_structure_step extends restore_step {
 
     protected $pathlock;      // Path currently locking processing of children
 
+    /** @var int Number of queued records after which the insert queue is written to the database. */
+    protected int $insertqueuelimit = 500;
+
+    /** @var stdClass[] Records queued by {@see self::queue_insert_record()}, in queue order. */
+    private array $insertqueue = [];
+
     const SKIP_ALL_CHILDREN = -991399; // To instruct the dispatcher about to ignore
                                        // all children below path processor returning it
 
@@ -108,6 +114,9 @@ abstract class restore_structure_step extends restore_step {
 
         // And process it, dispatch to target methods in step will start automatically
         $xmlparser->process();
+
+        // Write all records still queued for bulk insertion.
+        $this->flush_insert_queue();
 
         // Have finished, launch the after_execute method of all the processing objects
         $this->launch_after_execute_methods();
@@ -217,6 +226,60 @@ abstract class restore_structure_step extends restore_step {
      */
     public function get_mapping($itemname, $oldid) {
         return restore_dbops::get_backup_ids_record($this->get_restoreid(), $itemname, $oldid);
+    }
+
+    /**
+     * Queue a record to be inserted in bulk together with other queued records.
+     *
+     * Use this instead of $DB->insert_record() to reduce the number of write queries. The queue is written when it is
+     * full and before the after_execute methods are launched. So nothing must read queued records from the table before.
+     *
+     * @param string $table The table to insert the record into.
+     * @param stdClass|array $record The record to insert, fields which are no columns of the table are ignored.
+     */
+    public function queue_insert_record(string $table, stdClass|array $record): void {
+        global $DB;
+
+        $record = array_intersect_key((array) $record, $DB->get_columns($table));
+        unset($record['id']);
+        // All records of one bulk insert need the same structure, so use a defined field order.
+        ksort($record);
+        $this->insertqueue[] = (object) [
+            'table' => $table,
+            'record' => $record,
+        ];
+        if (count($this->insertqueue) >= $this->insertqueuelimit) {
+            $this->flush_insert_queue();
+        }
+    }
+
+    /**
+     * Write all queued records with bulk inserts.
+     */
+    public function flush_insert_queue(): void {
+        global $DB;
+
+        if (!$this->insertqueue) {
+            return;
+        }
+        $queue = $this->insertqueue;
+        $this->insertqueue = [];
+
+        // Consecutive records of the same table and structure are written with one bulk insert, keeping their order.
+        $batch = [];
+        $batchkey = null;
+        $batchtable = null;
+        foreach ($queue as $item) {
+            $key = $item->table . ':' . implode(',', array_keys($item->record));
+            if ($key !== $batchkey && $batch) {
+                $DB->insert_records($batchtable, $batch);
+                $batch = [];
+            }
+            $batchkey = $key;
+            $batchtable = $item->table;
+            $batch[] = $item->record;
+        }
+        $DB->insert_records($batchtable, $batch);
     }
 
     /**

@@ -60,8 +60,6 @@ class restore_qtype_numerical_plugin extends restore_qtype_plugin {
      * Process the qtype/numerical element
      */
     public function process_numerical($data) {
-        global $DB;
-
         $data = (object)$data;
         $oldid = $data->id;
 
@@ -76,8 +74,8 @@ class restore_qtype_numerical_plugin extends restore_qtype_plugin {
             // Adjust some columns.
             $data->question = $newquestionid;
             $data->answer = $this->get_mappingid('question_answer', $data->answer);
-            // Insert record.
-            $newitemid = $DB->insert_record('question_numerical', $data);
+            // Queue the record to be inserted in bulk.
+            $this->step->queue_insert_record('question_numerical', $data);
         }
     }
 

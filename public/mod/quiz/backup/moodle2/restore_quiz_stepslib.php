@@ -399,7 +399,8 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
             $questionreference->itemid = $data->id;
             $questionreference->questionbankentryid = $question->questionbankentryid;
             $questionreference->version = null; // Default to Always latest.
-            $DB->insert_record('question_references', $questionreference);
+            // Queue the record to be inserted in bulk.
+            $this->queue_insert_record('question_references', $questionreference);
         }
     }
 

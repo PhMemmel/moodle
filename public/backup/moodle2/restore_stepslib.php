@@ -6604,14 +6604,14 @@ trait restore_question_reference_data_trait {
      * @param array $data the data from the XML file.
      */
     public function process_question_reference($data) {
-        global $DB;
         $data = (object) $data;
         $data->usingcontextid = $this->get_mappingid('context', $data->usingcontextid);
         $data->itemid = $this->get_new_parentid('quiz_question_instance');
         if ($entry = $this->get_mappingid('question_bank_entry', $data->questionbankentryid)) {
             $data->questionbankentryid = $entry;
         }
-        $DB->insert_record('question_references', $data);
+        // Queue the record to be inserted in bulk.
+        $this->queue_insert_record('question_references', $data);
     }
 }
 
