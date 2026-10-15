@@ -5138,6 +5138,9 @@ abstract class restore_activity_structure_step extends restore_structure_step {
  */
 class restore_create_categories_and_questions extends restore_structure_step {
 
+    /** @var int Commit after this many write queries, so the replicated writesets stay small. */
+    protected int $transactionbatchsize = 500;
+
     /** @var array $cachedcategory store a question category */
     protected $cachedcategory = null;
 

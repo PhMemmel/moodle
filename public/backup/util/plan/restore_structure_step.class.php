@@ -52,6 +52,15 @@ abstract class restore_structure_step extends restore_step {
     /** @var bool[][] Ids (as keys) per table that have already been assigned to the mapping of a queued record. */
     private array $insertqueueassignedids = [];
 
+    /** @var int Number of write queries after which the batch transaction is committed, 0 disables batching. */
+    protected int $transactionbatchsize = 0;
+
+    /** @var moodle_transaction|null The currently open batch transaction. */
+    private ?moodle_transaction $batchtransaction = null;
+
+    /** @var int The database write counter when the current batch transaction was started. */
+    private int $batchtransactionwrites = 0;
+
     const SKIP_ALL_CHILDREN = -991399; // To instruct the dispatcher about to ignore
                                        // all children below path processor returning it
 
@@ -119,10 +128,17 @@ abstract class restore_structure_step extends restore_step {
         $xmlparser->set_progress($progress);
 
         // And process it, dispatch to target methods in step will start automatically
-        $xmlparser->process();
-
-        // Write all records still queued for bulk insertion.
-        $this->flush_insert_queue();
+        // Writes are grouped into batch transactions (if enabled) to avoid one commit per query.
+        $this->start_batch_transaction();
+        try {
+            $xmlparser->process();
+            // Write all records still queued for bulk insertion.
+            $this->flush_insert_queue();
+            $this->commit_batch_transaction();
+        } catch (\Throwable $e) {
+            $this->rollback_batch_transaction();
+            throw $e;
+        }
 
         // Have finished, launch the after_execute method of all the processing objects
         $this->launch_after_execute_methods();
@@ -134,6 +150,8 @@ abstract class restore_structure_step extends restore_step {
      * dispatch it, following the naming rules
      */
     final public function process($data) {
+        global $DB;
+
         if (!array_key_exists($data['path'], $this->pathelements)) { // Incorrect path, must not happen
             throw new restore_step_exception('restore_structure_step_missing_path', $data['path']);
         }
@@ -167,6 +185,50 @@ abstract class restore_structure_step extends restore_step {
             $element->set_data($rdata);
         } else {               // Else, put the original parsed data
             $element->set_data($data);
+        }
+
+        // Commit regularly to keep the writesets of replicated databases small.
+        if ($this->batchtransaction && $DB->perf_get_writes() - $this->batchtransactionwrites >= $this->transactionbatchsize) {
+            $this->commit_batch_transaction();
+            $this->start_batch_transaction();
+        }
+    }
+
+    /**
+     * Start a batch transaction if batching is enabled and no transaction is controlled by the caller.
+     */
+    private function start_batch_transaction(): void {
+        global $DB;
+
+        if ($this->transactionbatchsize <= 0 || $DB->is_transaction_started()) {
+            return;
+        }
+        $this->batchtransaction = $DB->start_delegated_transaction();
+        $this->batchtransactionwrites = $DB->perf_get_writes();
+    }
+
+    /**
+     * Commit the current batch transaction, if any.
+     */
+    private function commit_batch_transaction(): void {
+        if ($this->batchtransaction) {
+            // Only forget the transaction after a successful commit, so a failed commit is rolled back.
+            $this->batchtransaction->allow_commit();
+            $this->batchtransaction = null;
+        }
+    }
+
+    /**
+     * Roll back the current batch transaction, if any.
+     *
+     * A forced rollback is used, because a failing processor may have left a nested transaction open.
+     */
+    private function rollback_batch_transaction(): void {
+        global $DB;
+
+        if ($this->batchtransaction) {
+            $this->batchtransaction = null;
+            $DB->force_transaction_rollback();
         }
     }
 
