@@ -110,6 +110,18 @@ $CFG->dboptions = [
                                             //   set to zero if you are using pg_bouncer in
                                             //   'transaction' mode (it is fine in 'session'
                                             //   mode).
+    // 'writeslowdownfactor' => 1,          // Slows down chunked bulk writes, but ONLY in code that explicitly
+                                            //   calls $DB->throttled_write() or $DB->pause_after_write().
+                                            //   This is NOT a general brake for all database writes.
+                                            //   After each such write the database layer waits for the
+                                            //   duration of that write multiplied by this factor,
+                                            //   to give clustered databases (e.g. Galera) time to
+                                            //   catch up. A good value to start with is 1: the next
+                                            //   write is delayed by exactly the duration of the previous
+                                            //   one. Increase it for a stronger slow down.
+                                            //   Default is 0/unset (no slow down).
+    // 'writeslowdownmax' => 5.0,           // Upper limit in seconds for a single pause caused by
+                                            //   'writeslowdownfactor'. Default is 5.
     // 'clientcompress' => true             // Use compression protocol to communicate with the database server.
                                             //   Decreases traffic from the database server.
                                             //   Not needed if the databse is on the same host.

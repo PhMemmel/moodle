@@ -1,0 +1,23 @@
+issueNumber: MDL-90158
+notes:
+  core:
+    - message: >-
+        Added `\moodle_database::throttled_write()` and
+        `\moodle_database::pause_after_write()` to slow down chunked bulk writes
+        (insert, update, delete) so that clustered databases get time to catch
+        up. `$DB->throttled_write(callable $write)` executes the write, measures
+        its duration, waits afterwards and returns the result of the callable.
+        `$DB->pause_after_write(float $duration)` only waits, for cases where
+        the write cannot be wrapped in a callable; the caller passes the
+        duration of the chunk in seconds. The wait time is the duration of the
+        write multiplied by the new optional database option
+        `$CFG->dboptions['writeslowdownfactor']`, capped by
+        `$CFG->dboptions['writeslowdownmax']` seconds (default 5); without
+        `writeslowdownfactor` (default) the methods do not wait. Use them in
+        background tasks, upgrade steps or CLI scripts that write large amounts
+        of data in chunks and where a low database load matters more than speed,
+        not in time-critical code such as web requests or inside a delegated
+        transaction. The slow down only applies to code that explicitly calls
+        one of these two methods, it is not a general brake for all database
+        writes.
+      type: improved

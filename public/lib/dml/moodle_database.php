@@ -575,6 +575,66 @@ abstract class moodle_database {
     }
 
     /**
+     * Executes a bulk write and pauses afterwards, proportionally to its duration.
+     *
+     * Use this for large write operations (insert, update, delete) that are executed in chunks and where
+     * keeping the load on the database low matters more than finishing quickly, typically in background
+     * tasks (scheduled or adhoc), upgrade steps or CLI scripts. Wrap each chunk, e.g.:
+     *
+     *     foreach (array_chunk($records, 500) as $chunk) {
+     *         $DB->throttled_write(fn() => $DB->insert_records('mytable', $chunk));
+     *     }
+     *
+     * Do not use it in time-critical code such as web requests, and not while holding a delegated
+     * transaction, because the pause would keep the transaction (and its locks) open.
+     *
+     * The pause is the duration of the write multiplied by $CFG->dboptions['writeslowdownfactor'],
+     * see {@see self::pause_after_write()}. The slow down only applies to code calling this method
+     * (or pause_after_write()) explicitly, it is not a general brake for all database writes.
+     *
+     * @param callable $write The write operation, e.g. fn() => $DB->insert_records('table', $chunk).
+     * @return mixed The return value of $write.
+     */
+    public function throttled_write(callable $write): mixed {
+        $start = hrtime(true);
+        $result = $write();
+        $this->pause_after_write((hrtime(true) - $start) / 1e9);
+        return $result;
+    }
+
+    /**
+     * Sleeps for the given duration multiplied by $CFG->dboptions['writeslowdownfactor'].
+     *
+     * Use this instead of {@see self::throttled_write()} if the write cannot be wrapped in a callable, for
+     * example if one chunk consists of several statements or the loop uses break/continue. Measure the
+     * duration of the chunk yourself and pass it in, same use cases and restrictions as throttled_write():
+     *
+     *     $start = hrtime(true);
+     *     $DB->insert_records('mytable', $chunk);
+     *     $DB->delete_records_list('othertable', 'id', $ids);
+     *     $DB->pause_after_write((hrtime(true) - $start) / 1e9);
+     *
+     * Does nothing if the factor is unset or 0. A single pause is capped at $CFG->dboptions['writeslowdownmax']
+     * seconds (default 5). Only has an effect where code calls this method (or throttled_write()) explicitly,
+     * database writes in general are not slowed down.
+     *
+     * @param float $duration Duration of the last write in seconds.
+     * @return float The number of seconds slept.
+     */
+    public function pause_after_write(float $duration): float {
+        // Both options are optional, throttling is disabled by default.
+        $factor = (float) ($this->dboptions['writeslowdownfactor'] ?? 0);
+        if ($factor <= 0) {
+            return 0.0;
+        }
+        $max = (float) ($this->dboptions['writeslowdownmax'] ?? 5.0);
+
+        $pause = min($duration * $factor, $max);
+        usleep((int) ($pause * 1e6));
+        return $pause;
+    }
+
+    /**
      * Returns database server info array
      * @return array Array containing 'description' and 'version' at least.
      */
