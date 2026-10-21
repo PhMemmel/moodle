@@ -263,4 +263,44 @@ final class helper_test extends \advanced_testcase {
             ],
         ];
     }
+
+    /**
+     * Data provider for test_render_messaging_widget_unsent_message_flag.
+     *
+     * @return array Datasets with widget type, whether an unsent message is stored and the expected attribute value.
+     */
+    public static function render_messaging_widget_unsent_message_flag_provider(): array {
+        return [
+            'drawer_without_unsent_message' => ['isdrawer' => true, 'hasunsent' => false, 'expected' => '0'],
+            'drawer_with_unsent_message' => ['isdrawer' => true, 'hasunsent' => true, 'expected' => '1'],
+            'index_without_unsent_message' => ['isdrawer' => false, 'hasunsent' => false, 'expected' => '0'],
+            'index_with_unsent_message' => ['isdrawer' => false, 'hasunsent' => true, 'expected' => '1'],
+        ];
+    }
+
+    /**
+     * Test that the messaging widget exposes whether an unsent message is stored in the session.
+     *
+     * @param bool $isdrawer Whether the drawer or the index page widget is rendered.
+     * @param bool $hasunsent Whether an unsent message is stored in the session.
+     * @param string $expected The expected value of the data attribute.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('render_messaging_widget_unsent_message_flag_provider')]
+    public function test_render_messaging_widget_unsent_message_flag(bool $isdrawer, bool $hasunsent, string $expected): void {
+        global $PAGE, $SESSION;
+
+        $this->setUser(self::getDataGenerator()->create_user());
+        $PAGE->set_url('/');
+        if ($hasunsent) {
+            $SESSION->core_message_set_unsent_message = [
+                'message' => 'Draft',
+                'conversationid' => 0,
+                'otheruserid' => 2,
+            ];
+        }
+
+        $html = helper::render_messaging_widget($isdrawer);
+
+        $this->assertStringContainsString('data-has-unsent-message="' . $expected . '"', $html);
+    }
 }

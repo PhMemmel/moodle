@@ -536,7 +536,7 @@ class helper {
         ?int $conversationid = null,
         ?string $view = null
     ) {
-        global $USER, $CFG, $PAGE;
+        global $USER, $CFG, $PAGE, $SESSION;
 
         // Early bail out conditions.
         if (empty($CFG->messaging) || !isloggedin() || isguestuser() || \core_user::awaiting_action()) {
@@ -609,6 +609,7 @@ class helper {
                 'notification' => $notification
             ],
             'isdrawer' => $isdrawer,
+            'hasunsentmessage' => !empty($SESSION->core_message_set_unsent_message),
             'showemojipicker' => !empty($CFG->allowemojipicker),
             'messagemaxlength' => api::MESSAGE_MAX_LENGTH,
             'caneditownmessageprofile' => has_capability('moodle/user:editownmessageprofile', \context_system::instance())
