@@ -362,6 +362,10 @@ function(
             messageRoot = document.getElementById(`message-drawer-${uniqueId}`);
         }
 
+        if (messageRoot.dataset.hasUnsentMessage !== '1') {
+            return;
+        }
+
         const storedMessage = await getStoredUnsentMessage();
         const messageTextArea = messageRoot.querySelector(SELECTORS.MESSAGE_TEXT_AREA);
         if (storedMessage.message && messageTextArea !== null) {

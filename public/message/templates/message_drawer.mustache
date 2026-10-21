@@ -28,9 +28,13 @@
     Context variables required for this template:
     * userid The logged in user id
     * urls The URLs for the popover
+    * hasunsentmessage Whether an unsent message is stored in the session
 
     Example context (json):
-    {}
+    {
+        "messagemaxlength": 4096,
+        "hasunsentmessage": false
+    }
 
 }}
 {{< core/drawer}}
@@ -41,7 +45,8 @@
         aria-labelledby="message-drawer-header-{{uniqid}}"
     {{/drawerattributes}}
     {{$drawercontent}}
-        <div id="message-drawer-{{uniqid}}" class="message-app" data-region="message-drawer" role="region" tabindex="0">
+        <div id="message-drawer-{{uniqid}}" class="message-app" data-region="message-drawer" role="region" tabindex="0"
+             data-has-unsent-message="{{#hasunsentmessage}}1{{/hasunsentmessage}}{{^hasunsentmessage}}0{{/hasunsentmessage}}">
             <h2 class="visually-hidden" id="message-drawer-header-{{uniqid}}">{{#str}} messagingcategory,admin {{/str}}</h2>
             <div class="closewidget text-end pe-2">
                 <a class="text-dark btn-link" data-action="closedrawer" href="#"
