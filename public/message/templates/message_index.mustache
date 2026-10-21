@@ -28,9 +28,14 @@
     Context variables required for this template:
     * userid The logged in user id
     * urls The URLs for the popover
+    * hasunsentmessage Whether an unsent message is stored in the session
 
     Example context (json):
-    {}
+    {
+        "messagemaxlength": 4096,
+        "hasunsentmessage": false,
+        "route": "null"
+    }
 
 }}
 <div
@@ -39,6 +44,7 @@
         aria-expanded="false"
         aria-hidden="true"
         data-region="message-index"
+        data-has-unsent-message="{{#hasunsentmessage}}1{{/hasunsentmessage}}{{^hasunsentmessage}}0{{/hasunsentmessage}}"
         role="region"
 >
     <div class="container-fluid">
