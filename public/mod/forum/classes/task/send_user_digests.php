@@ -262,9 +262,6 @@ class send_user_digests extends \core\task\adhoc_task {
 
         // Empty the queue only if successful.
         $this->empty_queue($this->recipient->id, $starttime);
-
-        // We have finishied all digest emails, update $CFG->digestmailtimelast.
-        set_config('digestmailtimelast', $starttime);
     }
 
     /**
