@@ -69,9 +69,6 @@ final class maildigest_test extends \advanced_testcase {
         $messages = $this->mailsink->get_messages();
         $this->assertEquals(0, count($messages));
 
-        // Tell Moodle that we've not sent any digest messages out recently.
-        $CFG->digestmailtimelast = 0;
-
         // And set the digest sending time to a negative number - this has
         // the effect of making it 11pm the previous day.
         $CFG->digestmailtime = -1;

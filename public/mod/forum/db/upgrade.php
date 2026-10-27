@@ -88,5 +88,13 @@ function xmldb_forum_upgrade($oldversion) {
     // Automatically generated Moodle v5.3.0 release upgrade line.
     // Put any upgrade step following this.
 
+    if ($oldversion < 2026100501) {
+        // Remove the obsolete digestmailtimelast setting, it is no longer used.
+        unset_config('digestmailtimelast');
+
+        // Forum savepoint reached.
+        upgrade_mod_savepoint(true, 2026100501, 'forum');
+    }
+
     return true;
 }
