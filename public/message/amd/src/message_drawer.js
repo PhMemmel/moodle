@@ -46,6 +46,7 @@ define(
     'core/modal_backdrop',
     'core/templates',
     'core/local/aria/selectors',
+    'core/localstorage',
 ],
 function(
     $,
@@ -72,7 +73,11 @@ function(
     ModalBackdrop,
     Templates,
     AriaSelectors,
+    LocalStorage,
 ) {
+
+    /** Local storage key of the flag that an unsent message has been stored in the session. */
+    const UNSENT_MESSAGE_FLAG = 'core_message/hasunsentmessage';
 
     var SELECTORS = {
         DRAWER: '[data-region="right-hand-drawer"]',
@@ -334,6 +339,7 @@ function(
                 otheruserid: otheruserid,
             }
         }]));
+        LocalStorage.set(UNSENT_MESSAGE_FLAG, '1');
     };
 
     /**
@@ -362,9 +368,15 @@ function(
             messageRoot = document.getElementById(`message-drawer-${uniqueId}`);
         }
 
-        if (messageRoot.dataset.hasUnsentMessage !== '1') {
+        // The page may have been rendered before the beacon request storing the unsent message was processed,
+        // so the local storage flag decides. A stored message known by the server (data attribute) is synced
+        // into the flag. If the local storage is not available, the data attribute is used directly.
+        const useflag = messageRoot.dataset.hasUnsentMessage !== '1'
+            || LocalStorage.set(UNSENT_MESSAGE_FLAG, '1');
+        if (useflag && LocalStorage.get(UNSENT_MESSAGE_FLAG) !== '1') {
             return;
         }
+        LocalStorage.set(UNSENT_MESSAGE_FLAG, '0');
 
         const storedMessage = await getStoredUnsentMessage();
         const messageTextArea = messageRoot.querySelector(SELECTORS.MESSAGE_TEXT_AREA);
