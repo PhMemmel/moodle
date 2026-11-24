@@ -1,0 +1,14 @@
+issueNumber: MDL-90708
+notes:
+  core_course:
+    - message: >-
+        `cm_info::create()` returns a given `cm_info` object unchanged again if
+        no user id is passed, even if it was built for a user other than the
+        current user. Since MDL-85036 it was created again for the current user
+        in this case, which replaced the modinfo of the user it was built for
+        and could cause a huge number of DB queries. If a user id is passed that
+        doesn't match, a new `cm_info` object is still created for that user.
+        Code that needs user specific information (e.g. `uservisible`) of a
+        given `cm_info` object for a particular user must pass that user id
+        explicitly.
+      type: changed

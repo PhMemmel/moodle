@@ -408,6 +408,32 @@ final class modinfo_test extends \advanced_testcase {
     }
 
     /**
+     * Tests that cm_info::create() keeps a given cm_info of another user unless a different user is requested.
+     */
+    public function test_create_with_cm_info_of_other_user(): void {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $page = $generator->create_module('page', ['course' => $course->id]);
+        $student = $generator->create_and_enrol($course, 'student');
+        $this->setAdminUser();
+
+        $modinfo = get_fast_modinfo($course->id, $student->id);
+        $cm = $modinfo->get_cm($page->cmid);
+
+        // Without a user id or with the user of the cm_info, the given cm_info is returned unchanged.
+        $this->assertSame($cm, cm_info::create($cm));
+        $this->assertSame($cm, cm_info::create($cm, $student->id));
+        // The modinfo of the student has not been replaced.
+        $this->assertSame($modinfo, get_fast_modinfo($course->id, $student->id));
+
+        // Requesting another user creates a cm_info for that user.
+        $admincm = cm_info::create($cm, get_admin()->id);
+        $this->assertNotSame($cm, $admincm);
+        $this->assertEquals(get_admin()->id, $admincm->get_modinfo()->get_user_id());
+    }
+
+    /**
      * Tests function for getting $course and $cm at once quickly from modinfo
      * based on cmid or cm record.
      */
