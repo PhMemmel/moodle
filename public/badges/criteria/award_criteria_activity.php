@@ -265,43 +265,22 @@ class award_criteria_activity extends award_criteria {
             }
             return array($join, $where, $params);
         } else {
-            // Get all cmids of modules related to the criteria.
+            // Only users who have completed all modules of the criteria are candidates.
             $cmids = array_map(fn ($x) => $x['module'], $this->params);
-            list($cmcmodulessql, $paramscmc) = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED);
-
-            // Create a sql query to get all users who have worked on these course modules.
-            $sql = "SELECT DISTINCT userid FROM {course_modules_completion} cmc "
-            . "WHERE coursemoduleid " . $cmcmodulessql . " AND "
-            . "( cmc.completionstate IN ( :completionpass, :completionfail, :completioncomplete ) )";
-            $paramscmcs = [
-                'completionpass' => COMPLETION_COMPLETE_PASS,
-                'completionfail' => COMPLETION_COMPLETE_FAIL,
-                'completioncomplete' => COMPLETION_COMPLETE
-            ];
-            $paramscmc = array_merge($paramscmc, $paramscmcs);
-            $userids = $DB->get_records_sql($sql, $paramscmc);
-
-            // Now check each user if the user has a completion of each module.
-            $useridsbadgeable = array_keys(array_filter(
-                $userids,
-                function ($user) use ($cmcmodulessql, $paramscmc, $cmids) {
-                    global $DB;
-                    $params = array_merge($paramscmc, ['userid' => $user->userid]);
-                    $select = "coursemoduleid " . $cmcmodulessql . " AND userid = :userid";
-                    $cmidsuser = $DB->get_fieldset_select('course_modules_completion', 'coursemoduleid', $select, $params);
-                    return empty(array_diff($cmidsuser, $cmids));
-                }
-            ));
-
-            // Finally create a where statement (if neccessary) with all userids who are allowed to get the badge.
-            // This list also includes all users who have previously received the badge. These are filtered out in the badge.php.
-            $join = "";
-            $where = "";
-            if (!empty($useridsbadgeable)) {
-                list($wherepart, $params) = $DB->get_in_or_equal($useridsbadgeable, SQL_PARAMS_NAMED);
-                $where = " AND u.id " . $wherepart;
-            }
-            return array($join, $where, $params);
+            [$cmcmodulessql, $params] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'completedmodule');
+            $where = " AND u.id IN (
+                           SELECT cmc.userid
+                             FROM {course_modules_completion} cmc
+                            WHERE cmc.coursemoduleid {$cmcmodulessql}
+                              AND cmc.completionstate IN (:completionpass, :completionfail, :completioncomplete)
+                         GROUP BY cmc.userid
+                           HAVING COUNT(cmc.coursemoduleid) = :completedmodulecount
+                       )";
+            $params['completionpass'] = COMPLETION_COMPLETE_PASS;
+            $params['completionfail'] = COMPLETION_COMPLETE_FAIL;
+            $params['completioncomplete'] = COMPLETION_COMPLETE;
+            $params['completedmodulecount'] = count($cmids);
+            return [$join, $where, $params];
         }
     }
 }
