@@ -243,7 +243,12 @@ class assign {
         $this->course = $course;
 
         // Ensure that $this->coursemodule is a cm_info object (or null).
-        $this->coursemodule = cm_info::create($coursemodule);
+        // A given cm_info is always kept as it is (also if it was built for another user than $USER) for performance reasons:
+        // creating it again for $USER would replace the modinfo of the user it was built for. This is fine, because assign only
+        // uses user independent properties of $this->coursemodule. User specific information (e.g. uservisible) has to be
+        // fetched via get_fast_modinfo($course, $userid) for the user in question.
+        $cmuserid = $coursemodule instanceof cm_info ? $coursemodule->get_modinfo()->get_user_id() : 0;
+        $this->coursemodule = cm_info::create($coursemodule, $cmuserid);
 
         // Temporary cache only lives for a single request - used to reduce db lookups.
         $this->cache = array();
