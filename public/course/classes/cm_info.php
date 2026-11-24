@@ -1453,11 +1453,17 @@ class cm_info implements IteratorAggregate {
     }
 
     /**
-     * Creates a cm_info object from a database record (also accepts cm_info
-     * in which case it is just returned unchanged).
+     * Creates a cm_info object from a database record, or returns a given cm_info object.
      *
-     * @param stdClass|cm_info|null|bool $cm Stdclass or cm_info (or null or false)
-     * @param int $userid Optional userid (default to current)
+     * If $cm is already a cm_info object, it is returned unchanged if $userid is empty or matches the user
+     * it was built for. Only if a different $userid is passed, a new cm_info object is created for that user.
+     * This means that with an empty $userid a given cm_info object of another user is returned as it is:
+     * callers that need user specific information (e.g. uservisible) for a particular user must pass that user id.
+     *
+     * If $cm is a database record, the cm_info object is created for $userid, or for the current user if $userid is empty.
+     *
+     * @param stdClass|cm_info|null|bool $cm Database record or cm_info (or null or false)
+     * @param int $userid User the cm_info is needed for; 0 to keep a given cm_info of any user (current user for records)
      * @return cm_info|null Object as cm_info, or null if input was null/false
      */
     public static function create($cm, $userid = 0) {
@@ -1465,8 +1471,9 @@ class cm_info implements IteratorAggregate {
         if (!$cm) {
             return null;
         }
-        // If it is already a cm_info object with the right user, just return it.
-        if (($cm instanceof cm_info) && ($cm->get_modinfo()->userid == $userid)) {
+        // If it is already a cm_info object and no other user is requested, just return it.
+        // Creating it again for $USER would replace the modinfo of the user it was built for.
+        if (($cm instanceof cm_info) && (empty($userid) || $cm->get_modinfo()->userid == $userid)) {
             return $cm;
         }
         // Otherwise load modinfo.
