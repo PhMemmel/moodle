@@ -5429,4 +5429,23 @@ Anchor link 2:<a title=\"bananas\" href=\"../logo-240x60.gif\">Link text</a>
         $history = $assign->get_assign_attempt_history_renderable($student);
         $this->assertEmpty($history->grades);
     }
+
+    /**
+     * Test that the constructor keeps a given cm_info of another user and does not replace the modinfo of that user.
+     */
+    public function test_constructor_keeps_cm_info_of_other_user(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $instance = $this->getDataGenerator()->create_module('assign', ['course' => $course->id]);
+        $this->setAdminUser();
+
+        $modinfo = get_fast_modinfo($course->id, $student->id);
+        $cm = $modinfo->get_cm($instance->cmid);
+
+        $assign = new assign(null, $cm, $course);
+
+        $this->assertSame($cm, $assign->get_course_module());
+        $this->assertSame($modinfo, get_fast_modinfo($course->id, $student->id));
+    }
 }
